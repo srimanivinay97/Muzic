@@ -1,0 +1,140 @@
+/* The HTML "hidden" attribute must always hide elements,
+   even when a class sets display: flex */
+[hidden] {
+  display: none !important;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  /* Colorful background so the glass effect has something to blur */
+  background: linear-gradient(160deg, #ff6a88 0%, #6a5cff 45%, #1b1f3b 100%);
+  background-attachment: fixed;
+}
+
+.app {
+  max-width: 600px;
+  margin: 0 auto;
+  /* Space at the top for the notch, space at the bottom for the player bar */
+  padding: env(safe-area-inset-top) 16px 180px;
+}
+
+/* The core glass look, used by header, list and player */
+.glass {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 24px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding: 16px 20px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 8px;
+}
+
+.list li button {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+  /* Long names get cut off with "..." instead of wrapping */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list li button.active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.list .empty {
+  padding: 16px;
+  opacity: 0.8;
+}
+
+.btn-glass {
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.btn-glass.big {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  font-size: 1.5rem;
+}
+
+/* Floating bar pinned to the bottom of the screen */
+.player {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  max-width: 576px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.info {
+  flex: 1;
+  min-width: 0; /* lets the title shrink so ellipsis works in a flex row */
+}
+
+.title {
+  margin-bottom: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #fff;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Glass Music</title>
+
+  <!-- iOS "Add to Home Screen" settings -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Glass Music">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1b1f3b">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="glass header">
+      <h1>My Music</h1>
+      <button id="add-btn" class="btn-glass">+ Add</button>
+      <input id="file-input" type="file" accept="audio/*" multiple hidden>
+    </header>
+
+    <ul id="track-list" class="glass list">
+      <li class="empty">Tap "+ Add" to pick songs from your device.</li>
+    </ul>
+  </main>
+
+  <footer id="now-playing" class="glass player" hidden>
+    <div class="info">
+      <div id="title" class="title">Nothing playing</div>
+      <input id="progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="Seek">
+    </div>
+    <div class="controls">
+      <button id="prev" class="btn-glass" aria-label="Previous track">⏮</button>
+      <button id="play" class="btn-glass big" aria-label="Play or pause">▶</button>
+      <button id="next" class="btn-glass" aria-label="Next track">⏭</button>
+    </div>
+  </footer>
+
+  <audio id="audio" preload="metadata"></audio>
+  <script src="app.js"></script>
+</body>
+</html>
