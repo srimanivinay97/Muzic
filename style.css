@@ -1008,28 +1008,37 @@ h1 {
   transition: background 0.2s ease;
 }
 
-/* A red delete panel sits behind the row and is revealed as it slides left */
+/* A delete panel sits just off the row's right edge and follows it as it slides
+   left. It is wider than the furthest the row can travel, so no bare gap can
+   ever show behind the row. */
 .track-list.virtual .track-row::after {
   content: "Remove";
   position: absolute;
   top: 0;
-  right: -140px;
-  width: 140px;
+  left: 100%;
+  width: 180px;   /* the drag stops at 140px, so this always covers the gap */
   height: 100%;
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: rgba(255, 60, 90, 0.9);
+  background: #7d0a1e;   /* deeper than the page, so it reads as its own panel */
   color: #fff;
   font-size: 14px;
   font-weight: 700;
+  letter-spacing: 0.01em;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: background 0.15s ease;
   pointer-events: none;
 }
 
-.track-list.virtual .track-row.will-delete::after {
+/* Visible for the whole sideways drag, not only past the halfway point */
+.track-list.virtual .track-row.swiping::after {
   opacity: 1;
+}
+
+/* Past the halfway point, the panel brightens to show releasing will delete */
+.track-list.virtual .track-row.will-delete::after {
+  background: #ff3b5c;
 }
 
 /* ---------- Update ready banner ---------- */

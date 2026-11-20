@@ -146,7 +146,6 @@ let sleepEndsAt = 0;        // When the timer finishes, in milliseconds
 let sleepAtTrackEnd = false;
 let sleepTick = null;
 
-let keepAliveCtx = null;
 let audioUnlocked = false;
 
 const rowById = new Map();
@@ -798,10 +797,11 @@ function openSleepSheet() {
 
 // ============================================================
 // Background playback help
-// iOS blocks a web app from starting audio while it is in the background. Two things help:
-// 1. Both players are unlocked by the first tap, so neither needs fresh permission later.
-// 2. A silent tone keeps the app registered as actively playing between songs.
-// Neither is guaranteed. They are workarounds for a limitation in Safari itself.
+// iOS blocks a web app from starting audio while it is in the background. Both players
+// are unlocked by the first tap, so the next song never needs fresh permission later.
+// This is a workaround for a limitation in Safari itself, not a guaranteed fix.
+// A silent keep-alive tone was tried here too, but it took over the system's
+// "now playing" slot and made the notification show the song as stopped.
 // ============================================================
 function unlockAudio() {
   if (audioUnlocked) return;
@@ -823,31 +823,6 @@ function unlockAudio() {
       });
     }
   }
-}
-
-function startKeepAlive() {
-  try {
-    if (!keepAliveCtx) {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      keepAliveCtx = new Ctx();
-
-      const osc = keepAliveCtx.createOscillator();
-      const gain = keepAliveCtx.createGain();
-      osc.frequency.value = 30;        // Below what people can hear
-      gain.gain.value = 0.0001;        // Near silence, but not zero, so it counts as output
-      osc.connect(gain).connect(keepAliveCtx.destination);
-      osc.start();
-    }
-    if (keepAliveCtx.state === 'suspended') keepAliveCtx.resume();
-  } catch (err) {
-    // Not supported here. Playback still works as before
-  }
-}
-
-function pauseKeepAlive() {
-  // Suspended while paused, so it uses no battery when you aren't listening
-  if (keepAliveCtx && keepAliveCtx.state === 'running') keepAliveCtx.suspend().catch(() => {});
 }
 
 // The first touch unlocks both players, before any button handler runs
@@ -1293,6 +1268,7 @@ function addSwipeToDelete(row, id) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       decided = true;
       dragging = Math.abs(dx) > Math.abs(dy);
+      if (dragging) row.classList.add('swiping'); // Reveals the panel behind the row
     }
     if (!dragging) return;
 
@@ -1307,7 +1283,7 @@ function addSwipeToDelete(row, id) {
 
     const dx = (e.changedTouches ? e.changedTouches[0].clientX : startX) - startX;
     row.style.transform = '';
-    row.classList.remove('will-delete');
+    row.classList.remove('will-delete', 'swiping');
     dragging = false;
 
     if (dx < -80) {
@@ -1915,7 +1891,12 @@ function swapToIdle(id) {
   }
 
   [audio, idle] = [idle, audio];
+
+  // The player we just left is emptied, so the system sees exactly one song.
+  // primeNext() fills it again with whatever comes next.
   delete idle.dataset.trackId;
+  idle.removeAttribute('src');
+  idle.load();
 
   currentId = id;
   pendingSeek = null;
@@ -1983,7 +1964,6 @@ function loadAndPlay(track) {
 }
 
 function playAudio() {
-  startKeepAlive();
   const p = audio.play();
   if (p && p.catch) {
     p.catch(() => {
@@ -2276,7 +2256,7 @@ for (const el of [audioA, audioB]) {
   el.addEventListener('play', activeOnly(() => {
     setPlayIcons(true);
     setPlaybackState('playing');
-    startKeepAlive();
+    updatePositionState();
   }));
 
   el.addEventListener('playing', activeOnly(() => {
@@ -2286,7 +2266,7 @@ for (const el of [audioA, audioB]) {
   el.addEventListener('pause', activeOnly(() => {
     setPlayIcons(false);
     setPlaybackState('paused');
-    pauseKeepAlive();
+    updatePositionState();
     saveState(true);
   }));
 
@@ -2301,11 +2281,10 @@ for (const el of [audioA, audioB]) {
   }));
 
   el.addEventListener('timeupdate', activeOnly(() => {
-    const now = Date.now();
-    if (now - lastSave > 5000) {
-      saveState();
-      updatePositionState();
-    }
+    // The lock screen is told the position every time, so its clock runs smoothly.
+    // Saving to storage stays on a slower schedule, because that one touches the disk.
+    updatePositionState();
+    if (Date.now() - lastSave > 5000) saveState();
     if (!document.hidden) updateTimes(); // No screen work while in the background
   }));
 
@@ -2524,10 +2503,7 @@ document.addEventListener('visibilitychange', () => {
   updateSleepUI();
 
   // If iOS stopped the next song from starting in the background, start it now
-  if (wantPlaying && audio.paused && currentId) {
-    startKeepAlive();
-    playAudio();
-  }
+  if (wantPlaying && audio.paused && currentId) playAudio();
 });
 
 window.addEventListener('pagehide', () => saveState(true));
