@@ -1,27 +1,43 @@
-// ---------- Short helper for getting elements ----------
+// ============================================================
+// Element references
+// ============================================================
 const $ = (id) => document.getElementById(id);
 
 const audio = $('audio');
 const fileInput = $('file-input');
 const trackList = $('track-list');
-const emptyMsg = $('empty');
+const emptyBox = $('empty');
 const searchEl = $('search');
 const pageTitle = $('page-title');
+const countEl = $('count');
 const mini = $('mini');
 const progress = $('progress');
+const fullPlayer = $('full-player');
 
-// ---------- State ----------
-let tracks = [];          // Each item: { title, url, hue }
-let current = -1;         // Index of the playing track, -1 = none
+// ============================================================
+// Supported formats
+// Extensions are compared in lowercase. Anything else is skipped with a message
+// ============================================================
+const SUPPORTED = ['mp3', 'm4a', 'mp4', 'm4b', 'aac', 'flac', 'wav', 'aif', 'aiff', 'caf'];
+
+// ============================================================
+// State
+// ============================================================
+let tracks = [];          // Each item: { title, format, url, hue, failed }
+let current = -1;         // Index of the playing track, -1 means none
 let activeTab = 'library';
 let searchQuery = '';
 let shuffleOn = false;
 let repeatMode = 0;       // 0 = off, 1 = repeat all, 2 = repeat one
 let seeking = false;      // True while the user drags the progress slider
+let toastTimer = null;
 
-// ---------- Helpers ----------
+// ============================================================
+// Helpers
+// ============================================================
 
-// Turns a song name into a number from 0 to 359 (a color). The same name always gives the same color.
+// Turns a song name into a number from 0 to 359, which is used as a color.
+// The same name always produces the same color.
 function hashHue(text) {
   let h = 0;
   for (const ch of text) {
@@ -30,12 +46,12 @@ function hashHue(text) {
   return h;
 }
 
-// Builds a gradient for the artwork tile from a hue
+// CSS for an artwork tile, built from a hue
 function artStyle(hue) {
-  return `background: linear-gradient(135deg, hsl(${hue} 85% 65%), hsl(${(hue + 60) % 360} 80% 35%))`;
+  return `background: linear-gradient(135deg, hsl(${hue} 85% 62%), hsl(${(hue + 60) % 360} 80% 34%))`;
 }
 
-// Converts seconds into "m:ss", for example 185 becomes "3:05"
+// Converts seconds into m:ss, for example 185 becomes "3:05"
 function formatTime(seconds) {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
   const m = Math.floor(seconds / 60);
@@ -43,24 +59,74 @@ function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-// ---------- Adding songs ----------
-$('add-btn').addEventListener('click', () => fileInput.click());
+// Returns the extension of a file name, in lowercase: "Song.FLAC" becomes "flac"
+function getExtension(name) {
+  const dot = name.lastIndexOf('.');
+  return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
+}
+
+// Shows a short message at the top of the screen
+function showToast(message) {
+  const toast = $('toast');
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.hidden = true;
+  }, 3500);
+}
+
+// Updates the "12 songs" text and switches the empty message on or off
+function updateCountAndEmpty() {
+  const n = tracks.length;
+  countEl.textContent = n === 0 ? 'No songs yet' : `${n} ${n === 1 ? 'song' : 'songs'}`;
+  emptyBox.hidden = n > 0;
+}
+
+// ============================================================
+// Adding songs
+// ============================================================
+function openPicker() {
+  fileInput.click();
+}
+
+$('add-btn').addEventListener('click', openPicker);
+$('empty-add').addEventListener('click', openPicker);
 
 fileInput.addEventListener('change', () => {
+  const skipped = [];
+
   for (const file of fileInput.files) {
-    // Remove the extension: "song.mp3" becomes "song"
+    const ext = getExtension(file.name);
+
+    if (!SUPPORTED.includes(ext)) {
+      skipped.push(file.name);
+      continue;
+    }
+
     const title = file.name.replace(/\.[^.]+$/, '');
     tracks.push({
       title,
-      url: URL.createObjectURL(file), // A temporary local link to the file on the device
+      format: ext.toUpperCase(),
+      url: URL.createObjectURL(file), // Temporary local link to the file
       hue: hashHue(title),
+      failed: false,
     });
   }
-  fileInput.value = ''; // Clear the picker so choosing the same file again still works
+
+  fileInput.value = ''; // Clear the picker so the same file can be chosen again later
+
   renderList();
+  updateCountAndEmpty();
+
+  if (skipped.length) {
+    showToast(`${skipped.length} file(s) skipped. This format is not supported.`);
+  }
 });
 
-// ---------- Tabs and search ----------
+// ============================================================
+// Tabs and search
+// ============================================================
 document.querySelectorAll('.tab').forEach((btn) => {
   btn.addEventListener('click', () => {
     activeTab = btn.dataset.tab;
@@ -88,17 +154,18 @@ searchEl.addEventListener('input', () => {
   renderList();
 });
 
-// ---------- Song list ----------
+// ============================================================
+// Song list
+// ============================================================
 function renderList() {
   const q = searchQuery.trim().toLowerCase();
 
-  // Keep each track's real index so clicking it still plays the right song
+  // Keep each track's real index so the right song plays even when the list is filtered
   const visible = tracks
     .map((track, index) => ({ track, index }))
     .filter(({ track }) => !q || track.title.toLowerCase().includes(q));
 
   trackList.innerHTML = '';
-  emptyMsg.hidden = tracks.length > 0;
 
   if (tracks.length > 0 && visible.length === 0) {
     const none = document.createElement('li');
@@ -110,7 +177,10 @@ function renderList() {
 
   for (const { track, index } of visible) {
     const row = document.createElement('li');
-    row.className = 'track-row' + (index === current ? ' playing' : '');
+    let className = 'track-row';
+    if (index === current) className += ' playing';
+    if (track.failed) className += ' failed';
+    row.className = className;
 
     const art = document.createElement('div');
     art.className = 'art row';
@@ -126,8 +196,15 @@ function renderList() {
 
     const sub = document.createElement('div');
     sub.className = 'track-sub';
-    sub.textContent = 'On This Device';
 
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = track.format;
+
+    const label = document.createElement('span');
+    label.textContent = track.failed ? "Can't play on this device" : 'On This Device';
+
+    sub.append(badge, label);
     text.append(title, sub);
     row.append(art, text);
     row.addEventListener('click', () => playIndex(index));
@@ -135,13 +212,15 @@ function renderList() {
   }
 }
 
-// ---------- Playback ----------
+// ============================================================
+// Playback
+// ============================================================
 function playIndex(index) {
   if (index < 0 || index >= tracks.length) return;
 
   current = index;
   audio.src = tracks[index].url;
-  audio.play().catch(() => {}); // iOS can block playback, so ignore the error quietly
+  audio.play().catch(() => {}); // iOS can block playback. Errors are handled by the audio "error" event
 
   updateNowPlayingUI();
   renderList();
@@ -149,7 +228,7 @@ function playIndex(index) {
 
 function togglePlay() {
   if (current === -1) {
-    playIndex(0);               // Nothing chosen yet, so start with the first song
+    playIndex(0);
   } else if (audio.paused) {
     audio.play().catch(() => {});
   } else {
@@ -157,18 +236,18 @@ function togglePlay() {
   }
 }
 
-// Returns the index of the next song, or null if the list should stop
+// Returns the index of the next song, or null if playback should stop
 function getNextIndex() {
   if (shuffleOn && tracks.length > 1) {
     let r;
     do {
       r = Math.floor(Math.random() * tracks.length);
-    } while (r === current);    // Avoid picking the same song twice in a row
+    } while (r === current); // Never repeat the same song twice in a row
     return r;
   }
   const n = current + 1;
   if (n < tracks.length) return n;
-  return repeatMode === 1 ? 0 : null; // Repeat-all wraps to the start, otherwise stop
+  return repeatMode === 1 ? 0 : null;
 }
 
 function next() {
@@ -183,7 +262,7 @@ function next() {
 }
 
 function prev() {
-  // More than 3 seconds in: restart the song. Otherwise go back one track
+  // Past 3 seconds: restart the song. Otherwise go to the previous song
   if (audio.currentTime > 3) {
     audio.currentTime = 0;
     return;
@@ -192,18 +271,22 @@ function prev() {
   playIndex(current <= 0 ? tracks.length - 1 : current - 1);
 }
 
-// ---------- Now Playing UI ----------
+// ============================================================
+// Now Playing UI
+// ============================================================
 function updateNowPlayingUI() {
   const track = tracks[current];
   if (!track) return;
 
   mini.hidden = false;
   $('mini-title').textContent = track.title;
-  $('fp-title').textContent = track.title;
   $('mini-art').style.cssText = artStyle(track.hue);
+  $('mini-art').textContent = '♪';
+
+  $('fp-title').textContent = track.title;
+  $('fp-sub').textContent = `${track.format} · On This Device`;
   $('fp-art').style.cssText = artStyle(track.hue);
   $('fp-art').textContent = '♪';
-  $('mini-art').textContent = '♪';
 
   setMediaSession(track);
 }
@@ -215,8 +298,7 @@ function setPlayIcons(isPlaying) {
 }
 
 function setShuffleIcon() {
-  const btn = $('shuffle');
-  btn.classList.toggle('on', shuffleOn);
+  $('shuffle').classList.toggle('on', shuffleOn);
 }
 
 function setRepeatIcon() {
@@ -225,24 +307,25 @@ function setRepeatIcon() {
   btn.textContent = repeatMode === 2 ? '↻1' : '↻';
 }
 
-// ---------- Open and close the full player ----------
+// ============================================================
+// Full player open and close
+// ============================================================
 function openFull() {
   if (current === -1) return;
-  $('full-player').classList.add('open');
-  $('full-player').setAttribute('aria-hidden', 'false');
+  fullPlayer.classList.add('open');
+  fullPlayer.setAttribute('aria-hidden', 'false');
 }
 
 function closeFull() {
-  $('full-player').classList.remove('open');
-  $('full-player').setAttribute('aria-hidden', 'true');
+  fullPlayer.classList.remove('open');
+  fullPlayer.setAttribute('aria-hidden', 'true');
 }
 
 $('mini-open').addEventListener('click', openFull);
 $('close-full').addEventListener('click', closeFull);
 
-// Swipe down to close the full player, like on Apple Music
+// Swipe down to close, as in Apple Music
 let touchStartY = null;
-const fullPlayer = $('full-player');
 
 fullPlayer.addEventListener('touchstart', (e) => {
   touchStartY = e.touches[0].clientY;
@@ -251,22 +334,19 @@ fullPlayer.addEventListener('touchstart', (e) => {
 fullPlayer.addEventListener('touchend', (e) => {
   if (touchStartY === null) return;
   const dy = e.changedTouches[0].clientY - touchStartY;
-  if (dy > 90) closeFull(); // Dragged down more than 90 pixels
+  if (dy > 90) closeFull();
   touchStartY = null;
 });
 
-// ---------- Button wiring ----------
+// ============================================================
+// Button wiring
+// ============================================================
 $('play').addEventListener('click', togglePlay);
-$('mini-play').addEventListener('click', (e) => {
-  e.stopPropagation(); // Don't also open the full player
-  togglePlay();
-});
 $('next').addEventListener('click', next);
-$('mini-next').addEventListener('click', (e) => {
-  e.stopPropagation();
-  next();
-});
 $('prev').addEventListener('click', prev);
+
+$('mini-play').addEventListener('click', togglePlay);
+$('mini-next').addEventListener('click', next);
 
 $('shuffle').addEventListener('click', () => {
   shuffleOn = !shuffleOn;
@@ -278,7 +358,9 @@ $('repeat').addEventListener('click', () => {
   setRepeatIcon();
 });
 
-// ---------- Audio element events ----------
+// ============================================================
+// Audio element events
+// ============================================================
 audio.addEventListener('play', () => setPlayIcons(true));
 audio.addEventListener('pause', () => setPlayIcons(false));
 
@@ -287,9 +369,8 @@ audio.addEventListener('timeupdate', () => {
   if (!isFinite(d) || d === 0) return;
 
   const fraction = audio.currentTime / d;
-  $('mini-bar').style.width = (fraction * 100) + '%';
+  $('mini-bar').style.width = fraction * 100 + '%';
 
-  // Don't move the slider while the user is dragging it
   if (!seeking) {
     progress.value = fraction * 1000;
     $('t-now').textContent = formatTime(audio.currentTime);
@@ -299,14 +380,26 @@ audio.addEventListener('timeupdate', () => {
 
 audio.addEventListener('ended', () => {
   if (repeatMode === 2) {
-    audio.currentTime = 0;      // Repeat one: play the same song again
+    audio.currentTime = 0;
     audio.play().catch(() => {});
   } else {
     next();
   }
 });
 
-// ---------- Progress slider ----------
+// If the browser can't decode a file, mark it and tell the user
+audio.addEventListener('error', () => {
+  if (current === -1) return;
+  const track = tracks[current];
+  track.failed = true;
+  showToast(`Can't play "${track.title}". This file may use an unsupported encoding.`);
+  setPlayIcons(false);
+  renderList();
+});
+
+// ============================================================
+// Progress slider
+// ============================================================
 progress.addEventListener('input', () => {
   seeking = true;
   if (isFinite(audio.duration)) {
@@ -315,14 +408,15 @@ progress.addEventListener('input', () => {
 });
 
 progress.addEventListener('change', () => {
-  // "change" fires once when the finger lifts, so we jump only once
   if (isFinite(audio.duration)) {
     audio.currentTime = (progress.value / 1000) * audio.duration;
   }
   seeking = false;
 });
 
-// ---------- Lock screen and Control Center controls ----------
+// ============================================================
+// Lock screen and Control Center controls
+// ============================================================
 function setMediaSession(track) {
   if (!('mediaSession' in navigator)) return;
 
@@ -342,13 +436,16 @@ function setMediaSession(track) {
     try {
       navigator.mediaSession.setActionHandler(action, handler);
     } catch (err) {
-      // Some browsers don't support every action. Skip those quietly
+      // Some browsers don't support every action. Those are skipped
     }
   }
 }
 
-// ---------- Start ----------
+// ============================================================
+// Start
+// ============================================================
 setPlayIcons(false);
 setShuffleIcon();
 setRepeatIcon();
 renderList();
+updateCountAndEmpty();

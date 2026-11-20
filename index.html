@@ -9,43 +9,48 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Music">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0b0b12">
+  <meta name="theme-color" content="#0a0a10">
 
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Colored blobs behind the glass, so the blur has something to show -->
+  <!-- Soft colored blobs behind the glass -->
   <div class="backdrop" aria-hidden="true">
     <span class="blob b1"></span>
     <span class="blob b2"></span>
-    <span class="blob b3"></span>
   </div>
 
-  <!-- ===== Main screen: Library or Search ===== -->
+  <!-- ===== Main screen ===== -->
   <main class="screen">
-    <header class="top-bar">
-      <h1 id="page-title" class="large-title">Library</h1>
-      <button id="add-btn" class="glass-pill icon-btn" aria-label="Add songs from this device">+</button>
-      <input id="file-input" type="file" accept="audio/*" multiple hidden>
+    <header class="top">
+      <div>
+        <h1 id="page-title">Library</h1>
+        <p id="count" class="count">No songs yet</p>
+      </div>
+      <button id="add-btn" class="btn primary">Add songs</button>
     </header>
 
-    <div class="search-wrap">
-      <input id="search" class="search glass" type="search" placeholder="Songs, music on this device" hidden>
-    </div>
+    <!-- The accept list names each extension, because iOS hides some audio files when only audio/* is given -->
+    <input id="file-input" type="file" multiple hidden
+           accept=".mp3,.m4a,.mp4,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf,audio/*">
 
-    <p id="empty" class="empty">
-      No songs yet.<br>Tap <strong>+</strong> to choose music from your device.
-    </p>
+    <input id="search" class="search glass" type="search" placeholder="Search songs" hidden>
+
+    <section id="empty" class="empty">
+      <h2>Your library is empty</h2>
+      <p>Add songs from your device. MP3, M4A, FLAC, AAC, and WAV files are supported.</p>
+      <button id="empty-add" class="btn primary">Choose songs</button>
+    </section>
 
     <ul id="track-list" class="track-list"></ul>
   </main>
 
-  <!-- ===== Mini player (shows once a song has been played) ===== -->
+  <!-- ===== Mini player ===== -->
   <div id="mini" class="mini glass" hidden>
-    <div id="mini-open" class="mini-info" role="button" aria-label="Open Now Playing">
+    <button id="mini-open" class="mini-info" aria-label="Open Now Playing">
       <div id="mini-art" class="art tiny"></div>
-      <div id="mini-title" class="mini-title">Not playing</div>
-    </div>
+      <div id="mini-title" class="mini-title"></div>
+    </button>
     <button id="mini-play" class="mini-btn" aria-label="Play or pause">▶</button>
     <button id="mini-next" class="mini-btn" aria-label="Next track">⏭</button>
     <div class="mini-progress"><span id="mini-bar"></span></div>
@@ -54,44 +59,48 @@
   <!-- ===== Tab bar ===== -->
   <nav class="tab-bar glass">
     <button class="tab active" data-tab="library">
-      <span class="tab-icon">♫</span>
-      <span>Library</span>
+      <span class="tab-icon">♫</span><span>Library</span>
     </button>
     <button class="tab" data-tab="search">
-      <span class="tab-icon">⌕</span>
-      <span>Search</span>
+      <span class="tab-icon">⌕</span><span>Search</span>
     </button>
   </nav>
 
-  <!-- ===== Full Now Playing screen (slides up) ===== -->
-  <section id="full-player" class="full-player" aria-hidden="true">
+  <!-- ===== Full Now Playing sheet ===== -->
+  <section id="full-player" class="full" aria-hidden="true">
     <div class="full-inner">
       <div id="close-full" class="grabber" role="button" aria-label="Close Now Playing"></div>
 
-      <div id="fp-art" class="art big"></div>
-
-      <div class="fp-meta">
-        <div id="fp-title" class="fp-title">Nothing playing</div>
-        <div class="fp-sub">On This Device</div>
+      <div class="fp-left">
+        <div id="fp-art" class="art big"></div>
       </div>
 
-      <div class="scrub">
-        <input id="progress" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
-        <div class="times">
-          <span id="t-now">0:00</span>
-          <span id="t-left">-0:00</span>
+      <div class="fp-right">
+        <div class="fp-meta">
+          <div id="fp-title" class="fp-title">Nothing playing</div>
+          <div id="fp-sub" class="fp-sub">On This Device</div>
         </div>
-      </div>
 
-      <div class="fp-controls">
-        <button id="shuffle" class="ctrl small" aria-label="Shuffle">⇄</button>
-        <button id="prev" class="ctrl" aria-label="Previous track">⏮</button>
-        <button id="play" class="ctrl huge glass" aria-label="Play or pause">▶</button>
-        <button id="next" class="ctrl" aria-label="Next track">⏭</button>
-        <button id="repeat" class="ctrl small" aria-label="Repeat">↻</button>
+        <div class="scrub">
+          <input id="progress" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+          <div class="times">
+            <span id="t-now">0:00</span>
+            <span id="t-left">-0:00</span>
+          </div>
+        </div>
+
+        <div class="fp-controls">
+          <button id="shuffle" class="ctrl small" aria-label="Shuffle">⇄</button>
+          <button id="prev" class="ctrl" aria-label="Previous track">⏮</button>
+          <button id="play" class="ctrl huge" aria-label="Play or pause">▶</button>
+          <button id="next" class="ctrl" aria-label="Next track">⏭</button>
+          <button id="repeat" class="ctrl small" aria-label="Repeat">↻</button>
+        </div>
       </div>
     </div>
   </section>
+
+  <div id="toast" class="toast glass" hidden></div>
 
   <audio id="audio" preload="metadata"></audio>
   <script src="app.js"></script>

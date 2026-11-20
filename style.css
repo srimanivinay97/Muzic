@@ -1,39 +1,54 @@
-/* ---------- Basics ---------- */
+/* ============================================================
+   BASE
+   ============================================================ */
 [hidden] {
-  display: none !important; /* makes the hidden attribute always win */
+  display: none !important; /* the hidden attribute must always win */
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 :root {
-  --accent: #ff4d6d;
+  --accent: #fa2d55;
   --text: #ffffff;
-  --text-dim: rgba(255, 255, 255, 0.6);
-  --glass-fill: rgba(255, 255, 255, 0.14);
-  --glass-edge: rgba(255, 255, 255, 0.22);
-  --glass-shine: rgba(255, 255, 255, 0.35);
+  --dim: rgba(255, 255, 255, 0.62);
+  --glass: rgba(255, 255, 255, 0.12);
+  --edge: rgba(255, 255, 255, 0.2);
+  --shine: rgba(255, 255, 255, 0.35);
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-  margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
+  background: #0a0a10;
   color: var(--text);
-  background: #0b0b12;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-button {
-  font-family: inherit;
+button,
+input {
+  font: inherit;
   color: inherit;
+}
+
+button {
   cursor: pointer;
 }
 
-/* ---------- Animated backdrop ---------- */
+/* ============================================================
+   BACKGROUND
+   ============================================================ */
 .backdrop {
   position: fixed;
   inset: 0;
@@ -43,134 +58,165 @@ button {
 
 .blob {
   position: absolute;
-  width: 60vmax;
-  height: 60vmax;
+  width: 70vmax;
+  height: 70vmax;
   border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.75;
-  animation: drift 22s ease-in-out infinite alternate;
+  filter: blur(80px);
+  opacity: 0.55;
+  animation: drift 26s ease-in-out infinite alternate;
 }
 
-.b1 { background: #ff5e7e; top: -20vmax; left: -15vmax; }
-.b2 { background: #6a5cff; bottom: -25vmax; right: -20vmax; animation-duration: 28s; }
-.b3 { background: #00c2ff; top: 30%; left: 30%; opacity: 0.45; animation-duration: 34s; }
+.b1 {
+  background: #fa2d55;
+  top: -30vmax;
+  left: -20vmax;
+}
+
+.b2 {
+  background: #5e5ce6;
+  bottom: -35vmax;
+  right: -25vmax;
+  animation-duration: 32s;
+}
 
 @keyframes drift {
-  from { transform: translate(0, 0) scale(1); }
-  to   { transform: translate(8vmax, 6vmax) scale(1.15); }
+  from { transform: translate(0, 0); }
+  to   { transform: translate(6vmax, 5vmax); }
 }
 
-/* ---------- Liquid Glass surface ---------- */
+/* ============================================================
+   LIQUID GLASS SURFACE
+   ============================================================ */
 .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04));
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border: 1px solid var(--glass-edge);
+  border: 1px solid var(--edge);
   box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 var(--glass-shine),       /* bright top edge */
-    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    0 12px 36px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 var(--shine);
 }
 
-.glass-pill {
-  background: var(--glass-fill);
-  border: 1px solid var(--glass-edge);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 999px;
-}
-
-/* ---------- Main screen ---------- */
+/* ============================================================
+   SCREEN LAYOUT
+   Narrow on phones, wider on tablets and desktops
+   ============================================================ */
 .screen {
-  max-width: 640px;
+  width: 100%;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 12px) 16px 230px;
+  padding:
+    calc(env(safe-area-inset-top) + 20px)
+    clamp(16px, 4vw, 40px)
+    calc(env(safe-area-inset-bottom) + 170px);
 }
 
-.top-bar {
+.top {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
-.large-title {
+h1 {
   margin: 0;
-  font-size: 34px;
+  font-size: clamp(30px, 7vw, 44px);
   font-weight: 700;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
-.icon-btn {
-  width: 40px;
-  height: 40px;
-  font-size: 24px;
-  line-height: 1;
-  color: var(--text);
+.count {
+  margin: 6px 0 0;
+  font-size: clamp(14px, 2.6vw, 16px);
+  color: var(--dim);
 }
 
-.search-wrap {
-  margin: 12px 0 6px;
+/* Buttons */
+.btn {
+  padding: 10px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--glass);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+/* Search field. The 16px size stops iPhone Safari from zooming in when you tap it */
 .search {
   width: 100%;
-  padding: 11px 16px;
-  border-radius: 14px;
-  color: var(--text);
-  font-size: 17px;
+  margin-bottom: 18px;
+  padding: 13px 18px;
+  border-radius: 16px;
+  font-size: 16px;
   outline: none;
 }
 
 .search::placeholder {
-  color: var(--text-dim);
+  color: var(--dim);
 }
 
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
 .empty {
-  margin-top: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(40px, 12vh, 100px) 20px;
   text-align: center;
-  color: var(--text-dim);
+  color: var(--dim);
+}
+
+.empty h2 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text);
+}
+
+.empty p {
+  margin: 0 0 8px;
+  max-width: 340px;
   line-height: 1.5;
 }
 
-/* ---------- Track list ---------- */
+/* ============================================================
+   TRACK LIST
+   Single column on phones, a responsive grid on wider screens
+   ============================================================ */
 .track-list {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .track-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 10px 12px;
   border-radius: 14px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s ease;
 }
 
+.track-row:hover,
 .track-row:active {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.track-text {
-  flex: 1;
-  min-width: 0; /* lets the text shrink so ellipsis works */
-}
-
-.track-title {
-  font-size: 17px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.track-sub {
-  margin-top: 2px;
-  font-size: 14px;
-  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .track-row.playing .track-title {
@@ -178,55 +224,104 @@ button {
   font-weight: 600;
 }
 
-.no-match {
-  text-align: center;
-  color: var(--text-dim);
-  padding: 30px 0;
+.track-row.failed .track-sub {
+  color: var(--accent);
 }
 
-/* ---------- Album-style artwork (generated from the song name) ---------- */
+.track-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.track-title {
+  font-size: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+/* Small label showing the file format, such as MP3 or FLAC */
+.badge {
+  padding: 1px 6px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.no-match {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--dim);
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .track-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 6px 14px;
+  }
+}
+
+/* ============================================================
+   ARTWORK TILES (color generated from the song name)
+   ============================================================ */
 .art {
   display: grid;
   place-items: center;
   aspect-ratio: 1 / 1;
+  flex-shrink: 0;
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.92);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-  flex-shrink: 0;
 }
 
 .art.row {
   width: 52px;
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .art.tiny {
-  width: 40px;
+  width: 42px;
   font-size: 18px;
-  border-radius: 8px;
+  border-radius: 9px;
 }
 
+/* Scales with the screen width AND height, so it fits short phones too */
 .art.big {
-  width: min(78vw, 340px);
-  margin: 10px auto 28px;
-  border-radius: 24px;
-  font-size: 110px;
+  width: min(72vw, 42vh, 400px);
+  border-radius: 22px;
+  font-size: clamp(60px, 16vw, 120px);
+  margin: 0 auto;
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
-  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* ---------- Tab bar ---------- */
+/* ============================================================
+   TAB BAR
+   ============================================================ */
 .tab-bar {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(env(safe-area-inset-bottom) + 10px);
-  width: min(360px, calc(100% - 24px));
-  height: 62px;
-  display: flex;
-  padding: 6px;
-  border-radius: 999px;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
   z-index: 20;
+  display: flex;
+  width: min(340px, calc(100% - 32px));
+  height: 60px;
+  padding: 5px;
+  border-radius: 999px;
 }
 
 .tab {
@@ -236,52 +331,57 @@ button {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  background: none;
   border: none;
   border-radius: 999px;
-  color: var(--text-dim);
+  background: none;
   font-size: 11px;
-  transition: color 0.2s, background 0.2s;
+  color: var(--dim);
 }
 
 .tab.active {
-  color: var(--accent);
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .tab-icon {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
 }
 
-/* ---------- Mini player ---------- */
+/* ============================================================
+   MINI PLAYER
+   ============================================================ */
 .mini {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(env(safe-area-inset-bottom) + 80px);
-  width: min(360px, calc(100% - 24px));
-  height: 60px;
+  bottom: calc(env(safe-area-inset-bottom) + 82px);
+  z-index: 19;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 8px 0 8px;
+  width: min(560px, calc(100% - 24px));
+  height: 64px;
+  padding: 0 6px 0 8px;
   border-radius: 20px;
-  z-index: 19;
   overflow: hidden;
 }
 
 .mini-info {
   flex: 1;
   min-width: 0;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  height: 100%;
+  gap: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
 }
 
 .mini-title {
+  min-width: 0;
   font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
@@ -290,16 +390,16 @@ button {
 }
 
 .mini-btn {
-  width: 42px;
-  height: 42px;
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: var(--text);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
+  border: none;
+  background: none;
+  font-size: 20px;
 }
 
-/* Thin progress line along the bottom of the mini player */
 .mini-progress {
   position: absolute;
   left: 0;
@@ -311,58 +411,64 @@ button {
 
 .mini-progress span {
   display: block;
+  width: 0;
   height: 100%;
-  width: 0%;
   background: #fff;
-  transition: width 0.25s linear;
 }
 
-/* ---------- Full Now Playing sheet ---------- */
-.full-player {
+/* ============================================================
+   FULL NOW PLAYING SHEET
+   Stacked on phones, two columns on desktop
+   ============================================================ */
+.full {
   position: fixed;
   inset: 0;
   z-index: 50;
+  overflow-y: auto;
+  background: rgba(10, 10, 16, 0.6);
+  backdrop-filter: blur(40px) saturate(170%);
+  -webkit-backdrop-filter: blur(40px) saturate(170%);
   transform: translateY(100%);
   transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-  background: rgba(12, 12, 20, 0.55);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
 }
 
-.full-player.open {
+.full.open {
   transform: translateY(0);
 }
 
 .full-inner {
-  height: 100%;
-  max-width: 480px;
-  margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 10px) 26px calc(env(safe-area-inset-bottom) + 24px);
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: clamp(14px, 3vh, 28px);
+  min-height: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding:
+    calc(env(safe-area-inset-top) + 36px)
+    24px
+    calc(env(safe-area-inset-bottom) + 28px);
 }
 
 .grabber {
-  width: 42px;
-  height: 5px;
-  margin: 0 auto;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
   position: absolute;
   top: calc(env(safe-area-inset-top) + 10px);
   left: 50%;
   transform: translateX(-50%);
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
 }
 
 .fp-meta {
-  text-align: left;
+  min-width: 0;
   margin-bottom: 18px;
 }
 
 .fp-title {
-  font-size: 24px;
+  font-size: clamp(22px, 5vw, 30px);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -371,11 +477,10 @@ button {
 
 .fp-sub {
   margin-top: 4px;
-  font-size: 17px;
-  color: var(--text-dim);
+  font-size: 16px;
+  color: var(--dim);
 }
 
-/* Progress slider */
 .scrub input[type="range"] {
   width: 100%;
   margin: 0;
@@ -387,35 +492,34 @@ button {
   justify-content: space-between;
   margin-top: 4px;
   font-size: 13px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums; /* digits keep the same width while counting */
+  color: var(--dim);
+  font-variant-numeric: tabular-nums; /* digits keep the same width while the time counts */
 }
 
-/* Playback buttons */
 .fp-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 26px;
+  margin-top: 22px;
 }
 
 .ctrl {
-  width: 60px;
-  height: 60px;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
   border: none;
   border-radius: 50%;
   background: none;
+  font-size: 28px;
   color: var(--text);
-  font-size: 30px;
-  display: grid;
-  place-items: center;
 }
 
 .ctrl.small {
   width: 44px;
   height: 44px;
-  font-size: 20px;
-  color: var(--text-dim);
+  font-size: 19px;
+  color: var(--dim);
 }
 
 .ctrl.on {
@@ -423,8 +527,58 @@ button {
 }
 
 .ctrl.huge {
-  width: 84px;
-  height: 84px;
-  font-size: 36px;
-  padding-left: 4px; /* optical centering of the play triangle */
+  width: 76px;
+  height: 76px;
+  padding-left: 4px; /* centers the play triangle visually */
+  font-size: 32px;
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Desktop and large tablet landscape: artwork on the left, controls on the right */
+@media (min-width: 900px) {
+  .full-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 64px;
+    max-width: 1040px;
+  }
+
+  .fp-left {
+    display: flex;
+    justify-content: center;
+  }
+
+  .art.big {
+    width: min(100%, 60vh, 460px);
+    margin: 0;
+  }
+
+  .fp-title {
+    font-size: 36px;
+  }
+
+  .fp-meta {
+    margin-bottom: 26px;
+  }
+}
+
+/* ============================================================
+   TOAST MESSAGE
+   ============================================================ */
+.toast {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top) + 16px);
+  transform: translateX(-50%);
+  z-index: 100;
+  width: min(420px, calc(100% - 32px));
+  padding: 12px 18px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: center;
 }
