@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Music">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0a0a10">
+  <meta name="theme-color" content="#7a0014">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -17,29 +17,40 @@
   <div class="backdrop" aria-hidden="true">
     <span class="blob b1"></span>
     <span class="blob b2"></span>
+    <span class="blob b3"></span>
   </div>
 
   <!-- ===== Main screen ===== -->
   <main class="screen">
     <header class="top">
-      <div>
+      <button id="back-btn" class="round-btn" aria-label="Back to playlists" hidden></button>
+      <div class="top-text">
         <h1 id="page-title">Library</h1>
-        <p id="count" class="count">No songs yet</p>
+        <p id="count" class="count"></p>
       </div>
-      <button id="add-btn" class="btn primary">Add songs</button>
+      <div class="top-actions">
+        <button id="add-btn" class="btn primary">Add Songs</button>
+        <button id="new-playlist-btn" class="btn primary" hidden>New Playlist</button>
+      </div>
     </header>
+
+    <div id="playlist-tools" class="playlist-tools" hidden>
+      <button id="playlist-shuffle" class="btn primary">Shuffle Play</button>
+      <button id="playlist-more" class="round-btn" aria-label="Playlist options"></button>
+    </div>
 
     <input id="file-input" type="file" multiple hidden
            accept=".mp3,.m4a,.mp4,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf,audio/*">
 
-    <input id="search" class="search glass" type="search" placeholder="Search songs" hidden>
+    <input id="search" class="search glass" type="search" placeholder="Songs, albums, artists" hidden>
 
     <section id="empty" class="empty">
       <h2>Your library is empty</h2>
       <p>Add songs from your device. MP3, M4A, FLAC, AAC, and WAV files are supported.</p>
-      <button id="empty-add" class="btn primary">Choose songs</button>
+      <button id="empty-add" class="btn primary">Choose Songs</button>
     </section>
 
+    <ul id="playlist-list" class="playlist-list" hidden></ul>
     <ul id="track-list" class="track-list"></ul>
   </main>
 
@@ -59,6 +70,9 @@
     <button class="tab active" data-tab="library">
       <span class="tab-icon" data-icon="note"></span><span>Library</span>
     </button>
+    <button class="tab" data-tab="playlists">
+      <span class="tab-icon" data-icon="playlist"></span><span>Playlists</span>
+    </button>
     <button class="tab" data-tab="search">
       <span class="tab-icon" data-icon="search"></span><span>Search</span>
     </button>
@@ -67,7 +81,16 @@
   <!-- ===== Full Now Playing sheet ===== -->
   <section id="full-player" class="full" aria-hidden="true">
     <div class="full-inner">
-      <div id="close-full" class="grabber" role="button" aria-label="Close Now Playing"></div>
+      <div class="fp-top">
+        <button id="close-full" class="round-btn" aria-label="Close Now Playing"></button>
+        <button id="queue-btn" class="pill-btn" aria-label="Show up next">
+          <span class="pill-icon"></span>Up Next
+        </button>
+      </div>
+
+      <section id="queue-panel" class="queue glass" hidden>
+        <ul id="queue-list" class="queue-list"></ul>
+      </section>
 
       <div class="fp-left">
         <div id="fp-art" class="art big"></div>
@@ -76,7 +99,7 @@
       <div class="fp-right">
         <div class="fp-meta">
           <div id="fp-title" class="fp-title">Nothing playing</div>
-          <div id="fp-sub" class="fp-sub">On This Device</div>
+          <div id="fp-sub" class="fp-sub"></div>
         </div>
 
         <div class="scrub">
@@ -98,11 +121,19 @@
     </div>
   </section>
 
+  <!-- ===== Action sheet (filled by app.js) ===== -->
+  <div id="sheet" class="sheet" hidden></div>
+
   <div id="toast" class="toast glass" hidden></div>
+
+  <!-- Hidden switch used to trigger haptic feedback on supported iPhones -->
+  <label id="haptic-label" class="haptic-label" aria-hidden="true">
+    <input type="checkbox" switch tabindex="-1">
+  </label>
 
   <audio id="audio" preload="metadata"></audio>
 
-  <!-- Reads title and cover art from MP3, M4A and other tagged files -->
+  <!-- Reads title, album, artist and cover art from tagged audio files -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
   <script src="app.js"></script>
 </body>

@@ -2,7 +2,7 @@
    BASE
    ============================================================ */
 [hidden] {
-  display: none !important; /* the hidden attribute must always win */
+  display: none !important; /* the hidden attribute always wins */
 }
 
 *,
@@ -12,12 +12,16 @@
 }
 
 :root {
-  --accent: #fa2d55;
   --text: #ffffff;
-  --dim: rgba(255, 255, 255, 0.62);
-  --glass: rgba(255, 255, 255, 0.12);
-  --edge: rgba(255, 255, 255, 0.2);
-  --shine: rgba(255, 255, 255, 0.35);
+  --dim: rgba(255, 255, 255, 0.72);
+  --glass: rgba(255, 255, 255, 0.14);
+  --edge: rgba(255, 255, 255, 0.26);
+  --shine: rgba(255, 255, 255, 0.4);
+  --red: #b0001c;
+
+  /* Player colors. app.js replaces these with colors taken from each song's cover */
+  --p1: #9b0a1f;
+  --p2: #2a0208;
 }
 
 html,
@@ -30,10 +34,11 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
-  background: #0a0a10;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background: linear-gradient(170deg, #c4001f 0%, #7a0014 55%, #2b0208 100%);
+  background-attachment: fixed;
 }
 
 button,
@@ -47,13 +52,14 @@ button {
 }
 
 /* ============================================================
-   BACKGROUND
+   BACKGROUND BLOBS
    ============================================================ */
 .backdrop {
   position: fixed;
   inset: 0;
   z-index: -1;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .blob {
@@ -62,22 +68,13 @@ button {
   height: 70vmax;
   border-radius: 50%;
   filter: blur(80px);
-  opacity: 0.55;
+  opacity: 0.5;
   animation: drift 26s ease-in-out infinite alternate;
 }
 
-.b1 {
-  background: #fa2d55;
-  top: -30vmax;
-  left: -20vmax;
-}
-
-.b2 {
-  background: #5e5ce6;
-  bottom: -35vmax;
-  right: -25vmax;
-  animation-duration: 32s;
-}
+.b1 { background: #ff4d5e; top: -30vmax; left: -20vmax; }
+.b2 { background: #ff8a3d; bottom: -35vmax; right: -25vmax; animation-duration: 32s; opacity: 0.35; }
+.b3 { background: #ffb3c1; top: 35%; left: 30%; opacity: 0.2; animation-duration: 38s; }
 
 @keyframes drift {
   from { transform: translate(0, 0); }
@@ -88,18 +85,17 @@ button {
    LIQUID GLASS SURFACE
    ============================================================ */
 .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05));
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
   border: 1px solid var(--edge);
   box-shadow:
-    0 12px 36px rgba(0, 0, 0, 0.35),
+    0 12px 36px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 var(--shine);
 }
 
 /* ============================================================
-   SCREEN LAYOUT
-   Narrow on phones, wider on tablets and desktops
+   SCREEN LAYOUT (phones, tablets, desktops)
    ============================================================ */
 .screen {
   width: 100%;
@@ -113,10 +109,19 @@ button {
 
 .top {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.top-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.top-actions {
+  display: flex;
+  gap: 8px;
 }
 
 h1 {
@@ -147,14 +152,40 @@ h1 {
 }
 
 .btn.primary {
-  background: var(--accent);
+  background: #ffffff;
+  color: var(--red);
   border-color: transparent;
 }
 
-/* Search field. The 16px size stops iPhone Safari from zooming in when you tap it */
+.round-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.round-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.playlist-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* Search field. 16px stops iPhone Safari from zooming in when tapped */
 .search {
   width: 100%;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   padding: 13px 18px;
   border-radius: 16px;
   font-size: 16px;
@@ -191,10 +222,12 @@ h1 {
 }
 
 /* ============================================================
-   TRACK LIST
-   Single column on phones, a responsive grid on wider screens
+   LISTS (songs, playlists)
+   One column on phones, a responsive grid on wider screens
    ============================================================ */
-.track-list {
+.track-list,
+.playlist-list,
+.queue-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -208,24 +241,27 @@ h1 {
   align-items: center;
   gap: 14px;
   min-width: 0;
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 16px;
   cursor: pointer;
   transition: background 0.2s ease;
 }
 
 .track-row:hover,
 .track-row:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.track-row.playing {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .track-row.playing .track-title {
-  color: var(--accent);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .track-row.failed .track-sub {
-  color: var(--accent);
+  color: #ffd0d7;
 }
 
 .track-text {
@@ -248,10 +284,17 @@ h1 {
   margin-top: 3px;
   font-size: 13px;
   color: var(--dim);
+  min-width: 0;
 }
 
-/* Small label showing the file format, such as MP3 or FLAC */
+.track-sub > span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .badge {
+  flex-shrink: 0;
   padding: 1px 6px;
   border: 1px solid var(--edge);
   border-radius: 6px;
@@ -260,23 +303,51 @@ h1 {
   letter-spacing: 0.04em;
 }
 
+.more-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--dim);
+}
+
+.more-btn:active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.more-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
 .no-match {
-  padding: 40px 0;
+  padding: 40px 16px;
   text-align: center;
   color: var(--dim);
   list-style: none;
+  line-height: 1.5;
 }
 
 @media (min-width: 720px) {
-  .track-list {
+  .track-list,
+  .playlist-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 6px 14px;
+  }
+
+  .track-list > .no-match,
+  .playlist-list > .no-match {
+    grid-column: 1 / -1;
   }
 }
 
 /* ============================================================
-   ARTWORK TILES (color generated from the song name)
+   ARTWORK (cover art, or a color tile made from the song name)
    ============================================================ */
 .art {
   display: grid;
@@ -288,24 +359,36 @@ h1 {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
+.art svg {
+  width: 42%;
+  height: 42%;
+}
+
 .art.row {
-  width: 52px;
-  font-size: 20px;
+  width: 54px;
+  border-radius: 11px;
 }
 
 .art.tiny {
   width: 42px;
-  font-size: 18px;
   border-radius: 9px;
 }
 
-/* Scales with the screen width AND height, so it fits short phones too */
 .art.big {
   width: min(72vw, 42vh, 400px);
-  border-radius: 22px;
-  font-size: clamp(60px, 16vw, 120px);
   margin: 0 auto;
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+  border-radius: 24px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+}
+
+.art.has-art {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.art.has-art svg {
+  display: none;
 }
 
 /* ============================================================
@@ -318,8 +401,8 @@ h1 {
   bottom: calc(env(safe-area-inset-bottom) + 12px);
   z-index: 20;
   display: flex;
-  width: min(340px, calc(100% - 32px));
-  height: 60px;
+  width: min(380px, calc(100% - 32px));
+  height: 62px;
   padding: 5px;
   border-radius: 999px;
 }
@@ -339,13 +422,15 @@ h1 {
 }
 
 .tab.active {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.14);
+  color: var(--red);
+  background: #ffffff;
 }
 
-.tab-icon {
-  font-size: 18px;
-  line-height: 1;
+.tab-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 0 auto;
 }
 
 /* ============================================================
@@ -355,7 +440,7 @@ h1 {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(env(safe-area-inset-bottom) + 82px);
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
   z-index: 19;
   display: flex;
   align-items: center;
@@ -397,7 +482,11 @@ h1 {
   flex-shrink: 0;
   border: none;
   background: none;
-  font-size: 20px;
+}
+
+.mini-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .mini-progress {
@@ -406,7 +495,7 @@ h1 {
   right: 0;
   bottom: 0;
   height: 2px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .mini-progress span {
@@ -418,16 +507,14 @@ h1 {
 
 /* ============================================================
    FULL NOW PLAYING SHEET
-   Stacked on phones, two columns on desktop
+   Background comes from the song's cover art colors (--p1, --p2)
    ============================================================ */
 .full {
   position: fixed;
   inset: 0;
   z-index: 50;
   overflow-y: auto;
-  background: rgba(10, 10, 16, 0.6);
-  backdrop-filter: blur(40px) saturate(170%);
-  -webkit-backdrop-filter: blur(40px) saturate(170%);
+  background: linear-gradient(180deg, var(--p1) 0%, var(--p2) 100%);
   transform: translateY(100%);
   transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -440,26 +527,76 @@ h1 {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: clamp(14px, 3vh, 28px);
+  gap: clamp(14px, 3vh, 26px);
   min-height: 100%;
   max-width: 520px;
   margin: 0 auto;
   padding:
-    calc(env(safe-area-inset-top) + 36px)
+    calc(env(safe-area-inset-top) + 14px)
     24px
     calc(env(safe-area-inset-bottom) + 28px);
 }
 
-.grabber {
-  position: absolute;
-  top: calc(env(safe-area-inset-top) + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 44px;
-  height: 5px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.4);
+.fp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--glass);
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.pill-btn.on {
+  background: #ffffff;
+  color: var(--red);
+}
+
+.pill-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.queue {
+  max-height: 42vh;
+  padding: 10px;
+  overflow-y: auto;
+  border-radius: 22px;
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 14px;
   cursor: pointer;
+}
+
+.queue-row:hover,
+.queue-row:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.queue-row .track-text {
+  min-width: 0;
+}
+
+/* Hide the cover while the Up Next list is open, so the list has room */
+.full.show-queue .fp-left {
+  display: none;
 }
 
 .fp-meta {
@@ -479,6 +616,9 @@ h1 {
   margin-top: 4px;
   font-size: 16px;
   color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .scrub input[type="range"] {
@@ -493,7 +633,7 @@ h1 {
   margin-top: 4px;
   font-size: 13px;
   color: var(--dim);
-  font-variant-numeric: tabular-nums; /* digits keep the same width while the time counts */
+  font-variant-numeric: tabular-nums;
 }
 
 .fp-controls {
@@ -511,33 +651,47 @@ h1 {
   border: none;
   border-radius: 50%;
   background: none;
-  font-size: 28px;
   color: var(--text);
+}
+
+.ctrl svg {
+  width: 26px;
+  height: 26px;
+  display: block;
 }
 
 .ctrl.small {
   width: 44px;
   height: 44px;
-  font-size: 19px;
   color: var(--dim);
 }
 
+.ctrl.small svg {
+  width: 20px;
+  height: 20px;
+}
+
 .ctrl.on {
-  color: var(--accent);
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
 }
 
 .ctrl.huge {
-  width: 76px;
-  height: 76px;
-  padding-left: 4px; /* centers the play triangle visually */
-  font-size: 32px;
+  width: 80px;
+  height: 80px;
+  padding-left: 4px;
   background: var(--glass);
   border: 1px solid var(--edge);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
-/* Desktop and large tablet landscape: artwork on the left, controls on the right */
+.ctrl.huge svg {
+  width: 32px;
+  height: 32px;
+}
+
+/* Desktop and wide tablets: artwork on the left, controls on the right */
 @media (min-width: 900px) {
   .full-inner {
     display: grid;
@@ -547,13 +701,18 @@ h1 {
     max-width: 1040px;
   }
 
+  .fp-top,
+  .queue {
+    grid-column: 1 / -1;
+  }
+
   .fp-left {
     display: flex;
     justify-content: center;
   }
 
   .art.big {
-    width: min(100%, 60vh, 460px);
+    width: min(100%, 62vh, 460px);
     margin: 0;
   }
 
@@ -567,7 +726,99 @@ h1 {
 }
 
 /* ============================================================
-   TOAST MESSAGE
+   ACTION SHEET (song options, playlist picker, text input)
+   ============================================================ */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(20, 0, 4, 0.45);
+}
+
+.sheet-card {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(70, 4, 16, 0.9);
+  border: 1px solid var(--edge);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  animation: sheetUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.sheet-card h3 {
+  margin: 0;
+  font-size: 17px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheet-msg {
+  margin: 0;
+  font-size: 14px;
+  text-align: center;
+  color: var(--dim);
+}
+
+.sheet-input {
+  padding: 13px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 16px;
+  outline: none;
+}
+
+.sheet-input::placeholder {
+  color: var(--dim);
+}
+
+.sheet-btn {
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.sheet-btn.primary {
+  background: #ffffff;
+  color: var(--red);
+}
+
+.sheet-btn.danger {
+  color: #ffc2cb;
+}
+
+.sheet-btn.cancel {
+  margin-top: 4px;
+  background: transparent;
+  color: var(--dim);
+}
+
+@media (min-width: 720px) {
+  .sheet {
+    align-items: center;
+  }
+}
+
+/* ============================================================
+   TOAST
    ============================================================ */
 .toast {
   position: fixed;
@@ -584,50 +835,22 @@ h1 {
 }
 
 /* ============================================================
-   ICONS AND ALBUM ART
+   HAPTIC TRIGGER
+   Visually hidden switch that iPhone Safari can turn into a tap
    ============================================================ */
-.ctrl svg,
-.mini-btn svg {
-  width: 26px;
-  height: 26px;
-  display: block;
+.haptic-label {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0.01;
+  pointer-events: none;
 }
 
-.ctrl.small svg {
-  width: 20px;
-  height: 20px;
-}
-
-.ctrl.huge svg {
-  width: 30px;
-  height: 30px;
-}
-
-.mini-btn svg {
-  width: 22px;
-  height: 22px;
-}
-
+/* Icons for tabs and rows */
+.pill-icon svg,
 .tab-icon svg {
-  width: 22px;
-  height: 22px;
-  display: block;
-  margin: 0 auto;
-}
-
-.art svg {
-  width: 42%;
-  height: 42%;
-  opacity: 0.9;
-}
-
-/* Cover art fills the tile and is cropped to a square */
-.art.has-art {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.art.has-art svg {
-  display: none;
+  stroke-width: 2;
 }
