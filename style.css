@@ -12,13 +12,14 @@
 }
 
 :root {
-  --text: #ffffff;
-  --dim: rgba(255, 255, 255, 0.72);
-  --glass: rgba(255, 255, 255, 0.14);
-  --edge: rgba(255, 255, 255, 0.26);
-  --shine: rgba(255, 255, 255, 0.4);
-  --red: #b0001c;
-  --top-red: #a3001a;
+  --bg: #000000;                           /* home background */
+  --text: #ff4d5a;                          /* main text, red on black */
+  --dim: rgba(255, 120, 130, 0.72);         /* dimmer red for secondary text */
+  --glass: rgba(255, 60, 80, 0.12);         /* red-tinted glass instead of white */
+  --edge: rgba(255, 80, 100, 0.3);
+  --shine: rgba(255, 120, 140, 0.28);
+  --red: #ff2d40;                           /* accent fill */
+  --red-deep: #8a0014;                      /* pressed / panel red */
 
   /* Player colors. app.js replaces these with colors from each song's cover */
   --p1: #9b0a1f;
@@ -29,7 +30,7 @@
    A gradient alone counts as an image, so the color must be set too,
    otherwise the status bar area turns white. */
 html {
-  background-color: var(--top-red);
+  background-color: var(--bg);
 }
 
 html,
@@ -46,8 +47,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  background-color: var(--top-red);
-  background-image: linear-gradient(170deg, #c4001f 0%, #7a0014 55%, #2b0208 100%);
+  background-color: var(--bg);
+  /* Near-black with a faint red glow at the top, so glass still has something to blur */
+  background-image: radial-gradient(120% 70% at 50% -10%, #2a0008 0%, rgba(17,1,4,0) 55%), var(--bg);
   background-attachment: fixed;
 }
 
@@ -87,9 +89,9 @@ button {
   animation: drift 26s ease-in-out infinite alternate;
 }
 
-.b1 { background: #ff4d5e; top: -30vmax; left: -20vmax; }
-.b2 { background: #ff8a3d; bottom: -35vmax; right: -25vmax; animation-duration: 32s; opacity: 0.35; }
-.b3 { background: #ffb3c1; top: 35%; left: 30%; opacity: 0.2; animation-duration: 38s; }
+.b1 { background: #c4001f; top: -32vmax; left: -22vmax; opacity: 0.32; }
+.b2 { background: #6a0012; bottom: -38vmax; right: -25vmax; animation-duration: 32s; opacity: 0.4; }
+.b3 { background: #ff3b4e; top: 40%; left: 32%; opacity: 0.1; animation-duration: 38s; }
 
 @keyframes drift {
   from { transform: translate(0, 0); }
@@ -218,8 +220,8 @@ h1 {
 }
 
 .btn.primary {
-  background: #ffffff;
-  color: var(--red);
+  background: var(--red);
+  color: #ffffff;
   border-color: transparent;
 }
 
@@ -495,8 +497,8 @@ h1 {
 }
 
 .tab.active {
-  color: var(--red);
-  background: #ffffff;
+  color: #ffffff;
+  background: var(--red);
 }
 
 .tab-icon svg {
@@ -693,10 +695,71 @@ h1 {
   text-overflow: ellipsis;
 }
 
+/* Custom progress scrubber. The filled part is driven by --pct, which app.js
+   updates as the song plays, so the left side fills smoothly. */
+.scrub {
+  --pct: 0%;
+  padding: 4px 0;
+}
+
 .scrub input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
   width: 100%;
+  height: 24px;              /* tall, easy to grab */
   margin: 0;
-  accent-color: #fff;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* WebKit / iOS Safari: track is a gradient split at --pct */
+.scrub input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(to right,
+      #ffffff 0%, #ffffff var(--pct),
+      rgba(255, 255, 255, 0.22) var(--pct), rgba(255, 255, 255, 0.22) 100%);
+}
+
+.scrub input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -4.5px;        /* centers the thumb on the 6px track */
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease;
+}
+
+/* Thumb grows while you drag, like Apple Music */
+.scrub input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.4);
+}
+
+/* Firefox: it has a real filled-progress part, so no gradient trick is needed */
+.scrub input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.scrub input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.scrub input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5);
 }
 
 .times {
@@ -872,8 +935,8 @@ h1 {
 }
 
 .sheet-btn.primary {
-  background: #ffffff;
-  color: var(--red);
+  background: var(--red);
+  color: #ffffff;
 }
 
 .sheet-btn.danger {
@@ -953,8 +1016,8 @@ h1 {
 }
 
 .round-btn.on {
-  background: #ffffff;
-  color: var(--red);
+  background: var(--red);
+  color: #ffffff;
   border-color: transparent;
 }
 

@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="Music">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Older iOS uses this for the status bar. iOS 26 uses the page background instead -->
-  <meta id="theme-color" name="theme-color" content="#a3001a">
+  <meta id="theme-color" name="theme-color" content="#000000">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -52,7 +52,7 @@
     </div>
 
     <input id="file-input" type="file" multiple hidden
-           accept=".mp3,.m4a,.mp4,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf,audio/*">
+           accept=".mp3,.m4a,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf">
     <input id="import-input" type="file" accept=".json,application/json" hidden>
 
     <input id="search" class="search glass" type="search" placeholder="Songs, movies, singers" hidden>
@@ -154,11 +154,7 @@
     <input type="checkbox" switch tabindex="-1">
   </label>
 
-  <!-- Two players: one plays the current song while the next is pre-loaded in the other.
-       Swapping between ready players survives iOS background limits better than
-       changing the source of a single player. -->
-  <audio id="audio-a" preload="metadata"></audio>
-  <audio id="audio-b" preload="metadata"></audio>
+  <audio id="audio" preload="metadata"></audio>
 
   <!-- Reads title, album, artist and cover art from tagged audio files -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>

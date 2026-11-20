@@ -5,10 +5,7 @@
 // ============================================================
 const $ = (id) => document.getElementById(id);
 
-const audioA = $('audio-a');
-const audioB = $('audio-b');
-let audio = audioA;           // The player currently making sound
-let idle = audioB;            // The other player, holding the next song ready
+const audio = $('audio');
 
 const fileInput = $('file-input');
 const importInput = $('import-input');
@@ -30,7 +27,7 @@ const STATE_KEY = 'glass-music-state';
 const SORT_KEY = 'glass-music-sort';
 const FAV_KEY = 'glass-music-favorites';
 const RECENT_KEY = 'glass-music-recent';
-const HOME_COLOR = '#a3001a';
+const HOME_COLOR = '#000000';
 
 // Built-in lists that behave like playlists but are generated, not saved
 const FAV_ID = '__favorites__';
@@ -797,35 +794,34 @@ function openSleepSheet() {
 
 // ============================================================
 // Background playback help
-// iOS blocks a web app from starting audio while it is in the background. Both players
-// are unlocked by the first tap, so the next song never needs fresh permission later.
-// This is a workaround for a limitation in Safari itself, not a guaranteed fix.
-// A silent keep-alive tone was tried here too, but it took over the system's
-// "now playing" slot and made the notification show the song as stopped.
+// iOS blocks a web app from starting audio while it is in the background. The player is
+// unlocked by the first tap so it needs no fresh permission later, but iOS still suspends
+// a backgrounded web app between tracks, so the next song may not start until you unlock
+// the phone. This is a limitation in Safari itself, not something the app can fully fix.
+// A second pre-loaded player and a silent keep-alive tone were both tried and removed:
+// they made the lock screen notification show the wrong song or a paused state.
 // ============================================================
 function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
 
-  for (const el of [audioA, audioB]) {
-    if (el.getAttribute('src')) continue; // Don't disturb a player that already has a song
-    el.src = SILENT_WAV;
-    const p = el.play();
-    if (p && p.then) {
-      p.then(() => {
-        el.pause();
-        if (el.getAttribute('src') === SILENT_WAV) {
-          el.removeAttribute('src');
-          el.load();
-        }
-      }).catch(() => {
-        if (el.getAttribute('src') === SILENT_WAV) el.removeAttribute('src');
-      });
-    }
+  if (audio.getAttribute('src')) return; // A song is already loaded, nothing to unlock
+  audio.src = SILENT_WAV;
+  const p = audio.play();
+  if (p && p.then) {
+    p.then(() => {
+      audio.pause();
+      if (audio.getAttribute('src') === SILENT_WAV) {
+        audio.removeAttribute('src');
+        audio.load();
+      }
+    }).catch(() => {
+      if (audio.getAttribute('src') === SILENT_WAV) audio.removeAttribute('src');
+    });
   }
 }
 
-// The first touch unlocks both players, before any button handler runs
+// The first touch unlocks the player, before any button handler runs
 ['pointerdown', 'touchstart'].forEach((ev) => {
   document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
 });
@@ -1848,73 +1844,13 @@ function playNext(id) {
   const pos = order.indexOf(currentId);
   order.splice(pos + 1, 0, id);
   if (!base.includes(id)) base.push(id);
-  primeNext();
   if (queueOpen) renderQueue();
   showToast('Playing next');
-}
-
-// Loads the song that comes after this one into the idle player, so the swap is instant
-async function primeNext() {
-  const pos = order.indexOf(currentId);
-  if (pos === -1) return;
-
-  let nextId = null;
-  if (pos + 1 < order.length) nextId = order[pos + 1];
-  else if (repeatMode === 1 && order.length > 1) nextId = order[0];
-  if (!nextId || nextId === currentId) return;
-
-  const track = byId(nextId);
-  if (!track || idle.dataset.trackId === nextId) return;
-
-  try {
-    const url = await fileUrlFor(track);
-    if (byId(currentId) === null) return;
-    idle.src = url;
-    idle.dataset.trackId = nextId;
-    idle.load();
-  } catch (err) {
-    // The file is missing. It will be reported when it's actually played
-  }
-}
-
-// Swaps the two players. The incoming one already has its song loaded, which is what
-// gives this a chance of working while the phone is locked.
-function swapToIdle(id) {
-  const prevId = currentId;
-  const outgoing = audio;
-
-  outgoing.pause();
-  try {
-    outgoing.currentTime = 0;
-  } catch (err) {
-    // Not always allowed. Harmless
-  }
-
-  [audio, idle] = [idle, audio];
-
-  // The player we just left is emptied, so the system sees exactly one song.
-  // primeNext() fills it again with whatever comes next.
-  delete idle.dataset.trackId;
-  idle.removeAttribute('src');
-  idle.load();
-
-  currentId = id;
-  pendingSeek = null;
-  wantPlaying = true;
-  playAudio();
-
-  afterTrackChange(prevId, id);
 }
 
 function switchTo(id) {
   const track = byId(id);
   if (!track) return;
-
-  // Use the already-loaded player when it happens to hold this song
-  if (idle.dataset.trackId === id && idle.getAttribute('src')) {
-    swapToIdle(id);
-    return;
-  }
 
   const prevId = currentId;
   currentId = id;
@@ -1922,13 +1858,6 @@ function switchTo(id) {
   wantPlaying = true;
 
   loadAndPlay(track);
-  afterTrackChange(prevId, id);
-}
-
-// Everything that happens whichever way the song changed
-function afterTrackChange(prevId, id) {
-  const track = byId(id);
-  if (!track) return;
 
   setMediaSession(track);
   noteRecentlyPlayed(id);
@@ -1940,7 +1869,6 @@ function afterTrackChange(prevId, id) {
     highlightRow(prevId, id);
     updateNowPlayingUI();
   }
-  primeNext();
 }
 
 function loadAndPlay(track) {
@@ -2043,7 +1971,6 @@ function toggleShuffle() {
   if (base.length) order = shuffleOn ? shuffledWithFirst(base, currentId) : base.slice();
   setShuffleState();
   saveState(true);
-  primeNext();
   if (queueOpen) renderQueue();
 }
 
@@ -2051,7 +1978,6 @@ function cycleRepeat() {
   repeatMode = (repeatMode + 1) % 3;
   setRepeatState();
   saveState(true);
-  primeNext();
   if (queueOpen) renderQueue();
 }
 
@@ -2159,15 +2085,22 @@ function updateTimes() {
   const t = pendingSeek !== null ? pendingSeek : audio.currentTime;
   if (!isFinite(d) || d === 0) {
     tNow.textContent = formatTime(t);
+    if (!seeking) setScrubFill(0);   // A song whose length isn't known yet shows an empty bar
     return;
   }
   const fraction = Math.min(t / d, 1);
   miniBar.style.transform = `scaleX(${fraction})`;
   if (!seeking) {
     progress.value = fraction * 1000;
+    setScrubFill(fraction);           // Colors the filled part of the scrubber
     tNow.textContent = formatTime(t);
   }
   tLeft.textContent = '-' + formatTime(d - t);
+}
+
+// Sets the --pct variable the scrubber's CSS uses to fill its left side
+function setScrubFill(fraction) {
+  progress.style.setProperty('--pct', `${Math.max(0, Math.min(1, fraction)) * 100}%`);
 }
 
 // ============================================================
@@ -2228,15 +2161,7 @@ onTap('repeat', cycleRepeat);
 // ============================================================
 // Audio events
 // Both players share these handlers, and each one ignores events
-// from whichever player is not currently the active one.
 // ============================================================
-function activeOnly(fn) {
-  return function handler(e) {
-    if (e.target !== audio) return;
-    fn(e);
-  };
-}
-
 function handleBrokenTrack(track) {
   track.failed = true;
   markFailedRow(track.id);
@@ -2252,67 +2177,66 @@ function handleBrokenTrack(track) {
   }
 }
 
-for (const el of [audioA, audioB]) {
-  el.addEventListener('play', activeOnly(() => {
-    setPlayIcons(true);
-    setPlaybackState('playing');
-    updatePositionState();
-  }));
+audio.addEventListener('play', () => {
+  setPlayIcons(true);
+  setPlaybackState('playing');
+  updatePositionState();
+});
 
-  el.addEventListener('playing', activeOnly(() => {
-    errorStreak = 0; // A song started fine, so the failure count resets
-  }));
+audio.addEventListener('playing', () => {
+  errorStreak = 0; // A song started fine, so the failure count resets
+});
 
-  el.addEventListener('pause', activeOnly(() => {
-    setPlayIcons(false);
-    setPlaybackState('paused');
-    updatePositionState();
-    saveState(true);
-  }));
+audio.addEventListener('pause', () => {
+  setPlayIcons(false);
+  setPlaybackState('paused');
+  updatePositionState();
+  saveState(true);
+});
 
-  // Once a restored song knows its length, jump to where it stopped last time
-  el.addEventListener('loadedmetadata', activeOnly(() => {
-    if (pendingSeek !== null && isFinite(audio.duration)) {
-      audio.currentTime = Math.min(pendingSeek, Math.max(0, audio.duration - 1));
-      pendingSeek = null;
-    }
-    updatePositionState();
-    if (!document.hidden) updateTimes();
-  }));
+// Once a restored song knows its length, jump to where it stopped last time
+audio.addEventListener('loadedmetadata', () => {
+  if (pendingSeek !== null && isFinite(audio.duration)) {
+    audio.currentTime = Math.min(pendingSeek, Math.max(0, audio.duration - 1));
+    pendingSeek = null;
+  }
+  updatePositionState();
+  if (!document.hidden) updateTimes();
+});
 
-  el.addEventListener('timeupdate', activeOnly(() => {
-    // The lock screen is told the position every time, so its clock runs smoothly.
-    // Saving to storage stays on a slower schedule, because that one touches the disk.
-    updatePositionState();
-    if (Date.now() - lastSave > 5000) saveState();
-    if (!document.hidden) updateTimes(); // No screen work while in the background
-  }));
+audio.addEventListener('timeupdate', () => {
+  // The lock screen is told the position every time, so its clock runs smoothly.
+  // Saving to storage stays on a slower schedule, because that one touches the disk.
+  updatePositionState();
+  if (Date.now() - lastSave > 5000) saveState();
+  if (!document.hidden) updateTimes(); // No screen work while in the background
+});
 
-  el.addEventListener('ended', activeOnly(() => {
-    if (sleepAtTrackEnd) {
-      sleepNow();
-      return;
-    }
-    if (repeatMode === 2) {
-      audio.currentTime = 0;
-      playAudio();
-    } else {
-      next();
-    }
-  }));
+audio.addEventListener('ended', () => {
+  if (sleepAtTrackEnd) {
+    sleepNow();
+    return;
+  }
+  if (repeatMode === 2) {
+    audio.currentTime = 0;
+    playAudio();
+  } else {
+    next();
+  }
+});
 
-  el.addEventListener('error', activeOnly(() => {
-    const track = byId(currentId);
-    if (!track || !audio.getAttribute('src')) return;
-    handleBrokenTrack(track);
-  }));
-}
+audio.addEventListener('error', () => {
+  const track = byId(currentId);
+  if (!track || !audio.getAttribute('src')) return;
+  handleBrokenTrack(track);
+});
 
 // ============================================================
 // Progress slider
 // ============================================================
 progress.addEventListener('input', () => {
   seeking = true;
+  setScrubFill(progress.value / 1000);   // Fill follows the thumb while dragging
   if (isFinite(audio.duration)) {
     tNow.textContent = formatTime((progress.value / 1000) * audio.duration);
   }
@@ -2475,7 +2399,6 @@ function restoreState() {
       if (currentId !== track.id) return;
       audio.src = url;
       audio.load();
-      primeNext();
     })
     .catch(() => {});
 
