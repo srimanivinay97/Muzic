@@ -22,7 +22,14 @@ const tLeft = $('t-left');
 
 const SUPPORTED = new Set(['mp3', 'm4a', 'mp4', 'm4b', 'aac', 'flac', 'wav', 'aif', 'aiff', 'caf']);
 const STATE_KEY = 'glass-music-state';
+const SORT_KEY = 'glass-music-sort';
 const HOME_COLOR = '#a3001a';
+
+// Song list layout (must match the sizes in style.css)
+const ROW_H = 74;             // Height of one song row
+const ROW_PITCH = 78;         // Row height plus the gap between rows
+const GRID_MIN = 320;         // Narrowest a column can be on wide screens
+const GRID_GAP = 14;          // Space between columns on wide screens
 
 // ============================================================
 // Icons (SVG). "filled" icons use solid shapes, others use outlines
@@ -71,8 +78,10 @@ function setIcons() {
 // ============================================================
 // State
 // ============================================================
+// Each track in memory holds only small details (title, artist, flags).
+// The audio file and cover image are loaded from storage only when they are needed.
 let tracks = [];              // Songs in the order they were added
-const trackMap = new Map();   // id -> track, for instant lookups instead of searching the array
+const trackMap = new Map();   // id -> track, for instant lookups
 let playlists = [];           // Each: { id, name, trackIds, createdAt }
 
 let view = 'library';         // 'library' | 'search' | 'playlists' | 'playlist'
@@ -96,8 +105,21 @@ let uiDirty = false;          // True when the screen needs updating after comin
 let lastSave = 0;
 let db = null;
 let toastTimer = null;
+let storageText = '';
+let sortMode = 'name';
 
-const rowById = new Map();    // id -> its row in the visible song list
+const rowById = new Map();    // id -> its row element, for the rows currently on screen
+const artPending = new Map(); // id -> promise, so one cover is never loaded twice at the same time
+
+// Virtual list: only the rows near the screen exist in the page
+const virt = {
+  ids: [],            // Every song id in the list, in display order
+  inPlaylist: false,
+  cols: 1,            // Columns: 1 on phones, more on wide screens
+  rows: 0,
+  els: new Map(),     // index in ids -> the row element currently built for it
+  frame: 0,           // Pending animation frame, so scroll events are handled once per frame
+};
 
 // ============================================================
 // Helpers
@@ -132,7 +154,7 @@ function getExtension(name) {
 }
 
 // Removes website names that download sites add to tags,
-// e.g. "Manakanna Podichey - TeluguWap.Net" becomes "Manakanna Podichey"
+// e.g. "Manakanna Podichey - TeluguWap.Net" becomes "Manakanna Podichey".
 // A separator (- | : or a bracket) or "www." must come before the site name,
 // so real titles that happen to contain a dot are left alone.
 const SITE_SUFFIX = /\s*(?:[-–—|:~]\s*[\[(]?|[\[(]|(?=www\.))\s*(?:www\.)?[a-z0-9-]+\.(?:com|net|org|in|info|co|me|cc|biz|xyz|fm|io|mobi|ws|tv|club|site|pk|live|guru|world|top|app|online)\b[^\])]*[\])]?\s*$/i;
@@ -228,28 +250,53 @@ function readTags(file) {
   });
 }
 
-// Stores the cover as raw image bytes (a Blob). A Blob is about 25% smaller than a
-// base64 text version and doesn't need converting every time it is shown.
+// Stores the cover as raw image bytes (a Blob), about 25% smaller than base64 text
 function pictureToBlob(picture) {
   const mime = picture.format && picture.format.includes('/') ? picture.format : 'image/jpeg';
   return new Blob([new Uint8Array(picture.data)], { type: mime });
 }
 
-// Builds an artwork tile: an <img> when there is cover art, a color tile with a note when there isn't
-function fillArt(el, track, lazy = false) {
-  el.textContent = '';
-  if (track.artUrl) {
-    el.style.background = '';
+// ============================================================
+// Cover art
+// The image is loaded from storage the first time it's shown, then kept as a link
+// ============================================================
+function getArtUrl(track) {
+  if (track.artUrl) return Promise.resolve(track.artUrl);
+  if (!track.hasArt) return Promise.resolve(null);
+
+  if (!artPending.has(track.id)) {
+    const job = dbGet('art', track.id)
+      .then((rec) => {
+        if (rec && rec.blob) track.artUrl = URL.createObjectURL(rec.blob);
+        return track.artUrl || null;
+      })
+      .catch(() => null)
+      .finally(() => artPending.delete(track.id));
+    artPending.set(track.id, job);
+  }
+  return artPending.get(track.id);
+}
+
+// Fills an artwork tile. The color tile shows first, and the cover replaces it once loaded.
+// The dataset check stops a late image from landing in a tile that now shows a different song.
+function fillArt(el, track) {
+  el.dataset.artFor = track.id;
+  el.style.background = gradientCss(track.hue);
+  el.innerHTML = ICON.note;
+  if (!track.hasArt) return;
+
+  const show = (url) => {
+    if (!url || el.dataset.artFor !== track.id) return;
     const img = document.createElement('img');
     img.alt = '';
     img.decoding = 'async';
-    if (lazy) img.loading = 'lazy';   // Off-screen rows don't load their image until scrolled to
-    img.src = track.artUrl;
-    el.append(img);
-  } else {
-    el.style.background = gradientCss(track.hue);
-    el.innerHTML = ICON.note;
-  }
+    img.src = url;
+    el.style.background = '';
+    el.replaceChildren(img);
+  };
+
+  if (track.artUrl) show(track.artUrl);
+  else getArtUrl(track).then(show);
 }
 
 // ============================================================
@@ -301,7 +348,8 @@ function extractPalette(src) {
 
 async function applyPalette(track) {
   if (!track.palette) {
-    track.palette = (track.artUrl && (await extractPalette(track.artUrl))) || fallbackPalette(track.hue);
+    const url = await getArtUrl(track);
+    track.palette = (url && (await extractPalette(url))) || fallbackPalette(track.hue);
   }
   if (currentId !== track.id) return; // The song changed while the colors were being worked out
   fullPlayer.style.setProperty('--p1', track.palette[0]);
@@ -311,13 +359,20 @@ async function applyPalette(track) {
 
 // ============================================================
 // Storage (IndexedDB)
+// Four stores, so the list loads fast and files are only read when played:
+//   songs     small details only (title, artist, flags)
+//   files     the audio file, one record per song
+//   art       the cover image, one record per song
+//   playlists playlist names and song lists
 // ============================================================
 function openDatabase() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('glass-music', 2);
+    const req = indexedDB.open('glass-music', 3);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains('songs')) d.createObjectStore('songs', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('files')) d.createObjectStore('files', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('art')) d.createObjectStore('art', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('playlists')) d.createObjectStore('playlists', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
@@ -337,26 +392,63 @@ function dbRun(storeName, mode, action) {
   });
 }
 
+function dbGet(storeName, key) {
+  return dbRun(storeName, 'readonly', (s) => s.get(key));
+}
+
+// Saves a song's details, file and cover in one transaction, so all three are saved or none are
+function saveSong(meta, fileBlob, artBlob) {
+  return new Promise((resolve, reject) => {
+    const stores = ['songs'];
+    if (fileBlob) stores.push('files');
+    if (artBlob) stores.push('art');
+
+    const tx = db.transaction(stores, 'readwrite');
+    tx.objectStore('songs').put(meta);
+    if (fileBlob) tx.objectStore('files').put({ id: meta.id, blob: fileBlob });
+    if (artBlob) tx.objectStore('art').put({ id: meta.id, blob: artBlob });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+// Removes a song from every store that holds part of it
+function deleteSongRecords(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['songs', 'files', 'art'], 'readwrite');
+    tx.objectStore('songs').delete(id);
+    tx.objectStore('files').delete(id);
+    tx.objectStore('art').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 // Builds the in-memory track from a saved record.
-// Older versions saved cover art as text (a data URL). That still works and is converted later.
-function toTrack(record) {
-  const title = cleanText(record.title);
-  let artUrl = null;
-  if (record.artBlob) artUrl = URL.createObjectURL(record.artBlob);
-  else if (typeof record.art === 'string') artUrl = record.art;
+// The search text is built once here, so searching doesn't have to lowercase every title each time.
+function toTrack(rec) {
+  const title = cleanText(rec.title);
+  const album = cleanText(rec.album);
+  const artist = cleanText(rec.artist);
+
+  // Songs saved by older versions kept their cover inside the song record, so count those too
+  const hasArt = rec.hasArt !== undefined ? !!rec.hasArt : !!(rec.artBlob || rec.art);
 
   return {
-    id: record.id,
+    id: rec.id,
     title,
-    album: cleanText(record.album),
-    artist: cleanText(record.artist),
-    format: record.format,
-    addedAt: record.addedAt || 0,
-    artUrl,
-    artBlob: record.artBlob || null,
+    album,
+    artist,
+    format: rec.format || '',
+    addedAt: rec.addedAt || 0,
+    hasArt,
     hue: hashHue(title),
-    file: record.file,
-    url: null,        // The song's link is only made when it's played, to save memory
+    search: `${title} ${album} ${artist}`.toLowerCase(),
+    file: null,       // Only set for songs added during this visit (see handleFiles)
+    url: null,        // Playable link, made the first time the song is needed
+    artUrl: null,     // Cover link, made the first time the cover is shown
     failed: false,
     palette: null,
     sessionArt: null, // Cover as text, made once for the lock screen
@@ -368,9 +460,23 @@ function addTrack(track) {
   trackMap.set(track.id, track);
 }
 
-// Creates the playable link for a song the first time it's needed
-function urlFor(track) {
-  if (!track.url) track.url = URL.createObjectURL(track.file);
+// Returns a playable link for the song. Reads the file from storage only if it isn't loaded yet
+async function fileUrlFor(track) {
+  if (track.url) return track.url;
+
+  let blob = track.file;
+  if (!blob) {
+    const rec = await dbGet('files', track.id);
+    blob = rec ? rec.blob : null;
+  }
+  if (!blob) {
+    // Songs saved by the oldest version keep their file inside the song record
+    const legacy = await dbGet('songs', track.id);
+    blob = legacy && legacy.file;
+  }
+  if (!blob) throw new Error('File not found');
+
+  track.url = URL.createObjectURL(blob);
   return track.url;
 }
 
@@ -399,25 +505,28 @@ async function handleFiles() {
     }
 
     const tags = await readTags(file);
-    const record = {
+    const artBlob = tags && tags.picture ? pictureToBlob(tags.picture) : null;
+    const meta = {
       id: newId(),
       title: (tags && tags.title) || file.name.replace(/\.[^.]+$/, ''),
       album: (tags && tags.album) || '',
       artist: (tags && tags.artist) || '',
       format: ext.toUpperCase(),
-      artBlob: tags && tags.picture ? pictureToBlob(tags.picture) : null,
-      file,
-      addedAt: Date.now() + added, // +added keeps files from one pick in order, even within one millisecond
+      addedAt: Date.now() + added, // +added keeps files from one pick in order
+      hasArt: !!artBlob,
       tagsRead: true,
     };
 
     try {
-      await dbRun('songs', 'readwrite', (s) => s.put(record));
+      await saveSong(meta, file, artBlob);
     } catch (err) {
-      // If saving fails (for example storage is full), the song still works for this visit
+      // If saving fails (for example storage is full), the song still plays for this visit
     }
 
-    addTrack(toTrack(record));
+    const track = toTrack(meta);
+    track.file = file;
+    if (artBlob) track.artUrl = URL.createObjectURL(artBlob);
+    addTrack(track);
     added++;
   }
 
@@ -432,53 +541,65 @@ async function handleFiles() {
 
 fileInput.addEventListener('change', handleFiles);
 
-// Upgrades songs saved by older versions: reads missing tags, and turns
-// text-based cover art into a Blob, which is smaller on disk
-async function upgradeOldRecords(records) {
+// Moves songs saved by older versions into the new layout: the file and cover go into
+// their own stores, and the song record keeps only its details. Runs once, in the background.
+async function migrateLegacy(records) {
   let changed = false;
 
   for (const rec of records) {
-    const needsTags = !rec.tagsRead && window.jsmediatags;
-    const needsBlob = typeof rec.art === 'string' && !rec.artBlob;
-    if (!needsTags && !needsBlob) continue;
+    const isLegacy = rec.file !== undefined || rec.artBlob !== undefined || typeof rec.art === 'string';
+    if (!isLegacy) continue;
 
-    if (needsTags) {
+    let title = rec.title;
+    let album = rec.album || '';
+    let artist = rec.artist || '';
+    let artBlob = rec.artBlob || null;
+
+    // Older records may not have their tags read yet
+    if (rec.file && !rec.tagsRead && window.jsmediatags) {
       const tags = await readTags(rec.file);
       if (tags) {
-        rec.title = tags.title || rec.title;
-        rec.album = tags.album || '';
-        rec.artist = tags.artist || '';
-        if (tags.picture) {
-          rec.artBlob = pictureToBlob(tags.picture);
-          delete rec.art;
-        }
+        title = tags.title || title;
+        album = tags.album || '';
+        artist = tags.artist || '';
+        if (tags.picture) artBlob = pictureToBlob(tags.picture);
       }
-      rec.tagsRead = true;
     }
 
-    if (typeof rec.art === 'string' && !rec.artBlob) {
+    // The very oldest version stored the cover as text, which is converted to a Blob here
+    if (!artBlob && typeof rec.art === 'string') {
       try {
-        rec.artBlob = await (await fetch(rec.art)).blob();
-        delete rec.art;
+        artBlob = await (await fetch(rec.art)).blob();
       } catch (err) {
-        // Keep the old text version if conversion fails
+        artBlob = null;
       }
     }
+
+    const meta = {
+      id: rec.id,
+      title,
+      album,
+      artist,
+      format: rec.format || '',
+      addedAt: rec.addedAt || 0,
+      hasArt: !!artBlob,
+      tagsRead: true,
+    };
 
     try {
-      await dbRun('songs', 'readwrite', (s) => s.put(rec));
+      await saveSong(meta, rec.file || null, artBlob);
     } catch (err) {
-      continue;
+      continue; // The old record is untouched, so the next visit can try again
     }
 
-    // Swap the updated details into the live track
-    const old = byId(rec.id);
-    if (!old) continue;
-    const fresh = toTrack(rec);
-    fresh.url = old.url;
-    if (old.artUrl && old.artUrl.startsWith('blob:')) URL.revokeObjectURL(old.artUrl);
-    Object.assign(old, fresh, { url: old.url, failed: old.failed });
-    changed = true;
+    // Update the song already on screen with its new details
+    const live = byId(rec.id);
+    if (live) {
+      const fresh = toTrack(meta);
+      if (live.artUrl) URL.revokeObjectURL(live.artUrl);
+      Object.assign(live, fresh, { url: live.url, file: live.file, failed: live.failed });
+      changed = true;
+    }
   }
 
   if (changed) {
@@ -491,8 +612,6 @@ async function upgradeOldRecords(records) {
 // ============================================================
 // Storage usage shown under the Library title
 // ============================================================
-let storageText = '';
-
 async function updateStorageInfo() {
   storageText = '';
   if (navigator.storage && navigator.storage.estimate) {
@@ -577,10 +696,8 @@ $('title-btn').addEventListener('click', () => {
 });
 
 // ============================================================
-// Main screen rendering
+// Sorting
 // ============================================================
-// Alphabetical order by title. numeric:true puts "Song 2" before "Song 10",
-// and sensitivity:'base' ignores upper/lower case when comparing.
 // Compares text the way a person expects: case-insensitive, and numbers sorted by value
 const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -591,30 +708,28 @@ function compareText(x, y) {
   return nameCollator.compare(x, y);
 }
 
-const SORT_KEY = 'glass-music-sort';
 const SORT_MODES = {
   name:   { label: 'Name',           cmp: (a, b) => compareText(a.title, b.title) },
   artist: { label: 'Artist',         cmp: (a, b) => compareText(a.artist, b.artist) || compareText(a.title, b.title) },
   movie:  { label: 'Movie',          cmp: (a, b) => compareText(a.album, b.album) || compareText(a.title, b.title) },
   added:  { label: 'Recently added', cmp: (a, b) => b.addedAt - a.addedAt }, // newest first
 };
-let sortMode = 'name';
 
 function sortedTracks(list) {
   return list.slice().sort(SORT_MODES[sortMode].cmp);
 }
 
+// ============================================================
+// Main screen rendering
+// ============================================================
 function currentListIds() {
   if (view === 'library') return sortedTracks(tracks).map((t) => t.id);
 
   if (view === 'search') {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return sortedTracks(tracks).map((t) => t.id);
-    return sortedTracks(tracks)
-      .filter((t) => t.title.toLowerCase().includes(q)
-        || t.album.toLowerCase().includes(q)
-        || t.artist.toLowerCase().includes(q))
-      .map((t) => t.id);
+    const sorted = sortedTracks(tracks);
+    if (!q) return sorted.map((t) => t.id);
+    return sorted.filter((t) => t.search.includes(q)).map((t) => t.id);
   }
 
   if (view === 'playlist') {
@@ -715,19 +830,19 @@ function renderPlaylists() {
     frag.append(row);
   }
 
-  // replaceChildren swaps the whole list in one step, which is faster than adding rows one by one
   playlistList.replaceChildren(frag);
 }
 
 function buildTrackRow(track, ids, inPlaylist) {
   const row = document.createElement('li');
   row.className = 'track-row';
+  row.dataset.id = track.id;
   if (track.id === currentId) row.classList.add('playing');
   if (track.failed) row.classList.add('failed');
 
   const art = document.createElement('div');
   art.className = 'art row';
-  fillArt(art, track, true);
+  fillArt(art, track);
 
   const text = document.createElement('div');
   text.className = 'track-text';
@@ -768,34 +883,117 @@ function buildTrackRow(track, ids, inPlaylist) {
   return row;
 }
 
-function renderTracks(ids, inPlaylist) {
+// ============================================================
+// Virtual song list
+// Only the rows near the screen are built. Scrolling adds and removes rows as needed,
+// so a library of thousands of songs stays quick. Each row is placed at its exact position.
+// ============================================================
+function columnsFor(width) {
+  if (!window.matchMedia('(min-width: 720px)').matches) return 1;
+  return Math.max(1, Math.floor((width + GRID_GAP) / (GRID_MIN + GRID_GAP)));
+}
+
+function clearVirtualRows() {
+  for (const el of virt.els.values()) el.remove();
+  virt.els.clear();
   rowById.clear();
-  const frag = document.createDocumentFragment();
+}
+
+function placeRow(el, row, col) {
+  const colGap = GRID_GAP * (virt.cols - 1);
+  el.style.top = `${row * ROW_PITCH}px`;
+  el.style.width = `calc((100% - ${colGap}px) / ${virt.cols})`;
+  el.style.left = `calc(${col} * ((100% - ${colGap}px) / ${virt.cols} + ${GRID_GAP}px))`;
+}
+
+function renderTracks(ids, inPlaylist) {
+  clearVirtualRows();
+  virt.ids = ids;
+  virt.inPlaylist = inPlaylist;
 
   if (ids.length === 0) {
+    trackList.classList.remove('virtual');
+    trackList.style.height = '';
+
     let msg = '';
     if (inPlaylist) msg = 'This playlist is empty. Tap ⋯ on a song in your library and choose Add to Playlist.';
     else if (view === 'search' && tracks.length) msg = 'No matching songs';
+
     if (msg) {
       const none = document.createElement('li');
       none.className = 'no-match';
       none.textContent = msg;
-      frag.append(none);
+      trackList.replaceChildren(none);
+    } else {
+      trackList.replaceChildren();
+    }
+    return;
+  }
+
+  trackList.classList.add('virtual');
+  virt.cols = columnsFor(trackList.clientWidth);
+  virt.rows = Math.ceil(ids.length / virt.cols);
+  trackList.style.height = `${virt.rows * ROW_PITCH}px`;
+  renderVisibleRows();
+}
+
+function renderVisibleRows() {
+  if (!virt.ids.length || trackList.hidden) return;
+
+  // How far the list has scrolled past its top edge, in pixels
+  const listTop = trackList.getBoundingClientRect().top + window.scrollY;
+  const rel = Math.max(0, window.scrollY - listTop);
+
+  // Rows from a little above the screen to a little below, so fast scrolling has no gaps
+  const firstRow = Math.max(0, Math.floor(rel / ROW_PITCH) - 3);
+  const lastRow = Math.min(virt.rows - 1, Math.floor((rel + window.innerHeight) / ROW_PITCH) + 3);
+
+  // Remove rows that have scrolled out of range
+  for (const [idx, el] of virt.els) {
+    const row = Math.floor(idx / virt.cols);
+    if (row < firstRow || row > lastRow) {
+      el.remove();
+      virt.els.delete(idx);
+      if (rowById.get(el.dataset.id) === el) rowById.delete(el.dataset.id);
     }
   }
 
-  for (const id of ids) {
-    const track = byId(id);
-    if (!track) continue;
-    const row = buildTrackRow(track, ids, inPlaylist);
-    rowById.set(id, row);
-    frag.append(row);
-  }
+  // Build rows that have come into range
+  for (let row = firstRow; row <= lastRow; row++) {
+    for (let col = 0; col < virt.cols; col++) {
+      const idx = row * virt.cols + col;
+      if (idx >= virt.ids.length || virt.els.has(idx)) continue;
 
-  trackList.replaceChildren(frag);
+      const track = byId(virt.ids[idx]);
+      if (!track) continue;
+
+      const el = buildTrackRow(track, virt.ids, virt.inPlaylist);
+      placeRow(el, row, col);
+      virt.els.set(idx, el);
+      rowById.set(track.id, el);
+      trackList.append(el);
+    }
+  }
 }
 
-// Moves the "playing" highlight without rebuilding the whole list
+// Scroll events can fire many times a second, so the work is done once per screen refresh
+function scheduleVirtualRender() {
+  if (virt.frame) return;
+  virt.frame = requestAnimationFrame(() => {
+    virt.frame = 0;
+    renderVisibleRows();
+  });
+}
+
+window.addEventListener('scroll', scheduleVirtualRender, { passive: true });
+window.addEventListener('resize', () => {
+  if (!virt.ids.length || trackList.hidden) return;
+  // Rebuild only when the column count changes, such as rotating the phone
+  if (columnsFor(trackList.clientWidth) !== virt.cols) renderTracks(virt.ids, virt.inPlaylist);
+  else scheduleVirtualRender();
+});
+
+// Moves the "playing" highlight without rebuilding the list
 function highlightRow(prevId, nextId) {
   if (prevId) {
     const row = rowById.get(prevId);
@@ -1080,13 +1278,13 @@ async function removeTrack(id) {
 
   // Release the links so the browser can free the memory
   if (track.url) URL.revokeObjectURL(track.url);
-  if (track.artUrl && track.artUrl.startsWith('blob:')) URL.revokeObjectURL(track.artUrl);
+  if (track.artUrl) URL.revokeObjectURL(track.artUrl);
 
   const touched = playlists.filter((p) => p.trackIds.includes(id));
   touched.forEach((p) => { p.trackIds = p.trackIds.filter((x) => x !== id); });
 
   try {
-    await dbRun('songs', 'readwrite', (s) => s.delete(id));
+    await deleteSongRecords(id);
     await Promise.all(touched.map(persistPlaylist)); // Only playlists that contained the song
   } catch (err) {
     // The song is still gone from this visit
@@ -1109,12 +1307,12 @@ function startQueue(ids, startId = null) {
     startId = shuffleOn ? base[randomInt(base.length)] : base[0];
   }
   errorStreak = 0;
+  order = shuffleOn ? shuffledWithFirst(base, startId) : base.slice();
   switchTo(startId);
-  order = shuffleOn ? shuffledWithFirst(base, currentId) : base.slice();
   if (queueOpen) renderQueue();
 }
 
-// Changes the current song and starts it. The audio is started FIRST and with no waiting,
+// Changes the current song and starts it. The audio starts first, with no waiting,
 // because iOS is stricter about starting audio when the app is in the background.
 function switchTo(id) {
   const track = byId(id);
@@ -1125,9 +1323,7 @@ function switchTo(id) {
   pendingSeek = null;
   wantPlaying = true;
 
-  audio.src = urlFor(track);
-  playAudio();
-
+  loadAndPlay(track);
   setMediaSession(track);
   saveState(true);
 
@@ -1138,6 +1334,37 @@ function switchTo(id) {
     highlightRow(prevId, id);
     updateNowPlayingUI();
   }
+  prefetchNext();
+}
+
+// Points the audio at the song and starts it. Instant when the link is already made;
+// otherwise the file is read from storage first.
+function loadAndPlay(track) {
+  const wanted = track.id;
+
+  if (track.url) {
+    audio.src = track.url;
+    playAudio();
+    return;
+  }
+
+  fileUrlFor(track)
+    .then((url) => {
+      if (currentId !== wanted) return; // The user has already moved on to another song
+      audio.src = url;
+      playAudio();
+    })
+    .catch(() => {
+      if (currentId === wanted) handleBrokenTrack(track);
+    });
+}
+
+// Loads the next song's file in advance, so skipping forward starts right away
+function prefetchNext() {
+  const pos = order.indexOf(currentId);
+  if (pos === -1 || pos + 1 >= order.length) return;
+  const upcoming = byId(order[pos + 1]);
+  if (upcoming && !upcoming.url) fileUrlFor(upcoming).catch(() => {});
 }
 
 function playAudio() {
@@ -1200,7 +1427,13 @@ function togglePlay() {
     if (ids.length) startQueue(ids);
     return;
   }
-  if (!audio.src) audio.src = urlFor(byId(currentId));
+
+  // Nothing loaded yet (for example right after a refresh): load the song, then play
+  if (!audio.getAttribute('src')) {
+    wantPlaying = true;
+    loadAndPlay(byId(currentId));
+    return;
+  }
 
   if (audio.paused) {
     wantPlaying = true;
@@ -1254,7 +1487,7 @@ function renderQueue() {
 
     const art = document.createElement('div');
     art.className = 'art row';
-    fillArt(art, track, true);
+    fillArt(art, track);
 
     const text = document.createElement('div');
     text.className = 'track-text';
@@ -1439,10 +1672,7 @@ audio.addEventListener('ended', () => {
 });
 
 // A song that can't be decoded is skipped automatically instead of stopping the playlist
-audio.addEventListener('error', () => {
-  const track = byId(currentId);
-  if (!track || !audio.getAttribute('src')) return;
-
+function handleBrokenTrack(track) {
   track.failed = true;
   markFailedRow(track.id);
   errorStreak++;
@@ -1455,6 +1685,12 @@ audio.addEventListener('error', () => {
     setPlayIcons(false);
     showToast(`Can't play "${track.title}". This file may use an unsupported encoding.`);
   }
+}
+
+audio.addEventListener('error', () => {
+  const track = byId(currentId);
+  if (!track || !audio.getAttribute('src')) return;
+  handleBrokenTrack(track);
 });
 
 // ============================================================
@@ -1479,8 +1715,6 @@ progress.addEventListener('change', () => {
 // ============================================================
 // Lock screen and Control Center
 // ============================================================
-
-// The lock screen needs the cover as text. It's made once per song and kept.
 function blobToDataUrl(blob) {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -1500,18 +1734,27 @@ async function setMediaSession(track) {
   };
   navigator.mediaSession.metadata = new MediaMetadata(meta);
 
+  if (!track.hasArt) return;
+
   // The cover is added a moment later, so the music never waits for it
-  if (track.artBlob || track.artUrl) {
-    if (!track.sessionArt) {
-      track.sessionArt = track.artBlob ? await blobToDataUrl(track.artBlob) : track.artUrl;
+  if (!track.sessionArt) {
+    const url = await getArtUrl(track);
+    if (url) {
+      try {
+        const blob = await (await fetch(url)).blob();
+        track.sessionArt = await blobToDataUrl(blob);
+      } catch (err) {
+        // No cover on the lock screen. The music still plays
+      }
     }
-    if (track.sessionArt && currentId === track.id) {
-      const type = track.sessionArt.slice(5, track.sessionArt.indexOf(';')) || 'image/jpeg';
-      navigator.mediaSession.metadata = new MediaMetadata({
-        ...meta,
-        artwork: [{ src: track.sessionArt, sizes: '512x512', type }],
-      });
-    }
+  }
+
+  if (track.sessionArt && currentId === track.id) {
+    const type = track.sessionArt.slice(5, track.sessionArt.indexOf(';')) || 'image/jpeg';
+    navigator.mediaSession.metadata = new MediaMetadata({
+      ...meta,
+      artwork: [{ src: track.sessionArt, sizes: '512x512', type }],
+    });
   }
 }
 
@@ -1613,8 +1856,15 @@ function restoreState() {
 
   currentId = track.id;
   pendingSeek = Number(s.time) || 0;
-  audio.src = urlFor(track);
-  audio.load(); // Loads only the details, so the position can be applied before you press play
+
+  // The file is loaded now, but not played. The saved position is applied once it's ready
+  fileUrlFor(track)
+    .then((url) => {
+      if (currentId !== track.id) return;
+      audio.src = url;
+      audio.load();
+    })
+    .catch(() => {});
 
   updateNowPlayingUI();
   setMediaSession(track);
@@ -1661,6 +1911,7 @@ async function init() {
   try {
     db = await openDatabase();
 
+    // Only the small song records load here. Files and covers load when they're needed
     const [saved, savedPlaylists] = await Promise.all([
       dbRun('songs', 'readonly', (s) => s.getAll()),
       dbRun('playlists', 'readonly', (s) => s.getAll()),
@@ -1675,8 +1926,8 @@ async function init() {
     renderMain();
     restoreState();
 
-    // Runs after the library is on screen, so start-up stays fast
-    upgradeOldRecords(saved);
+    // Moves older saves into the new layout after the library is already on screen
+    migrateLegacy(saved);
   } catch (err) {
     renderMain();
     showToast("Couldn't open saved storage. Songs will only last this visit.");

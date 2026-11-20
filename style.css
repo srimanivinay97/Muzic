@@ -925,3 +925,18 @@ h1 {
   opacity: 0.01;
   pointer-events: none;
 }
+
+/* ============================================================
+   VIRTUAL SONG LIST
+   Rows are placed by app.js at exact positions, so the list
+   is a fixed-height box and rows are absolutely positioned inside it
+   ============================================================ */
+.track-list.virtual {
+  display: block;
+  position: relative;
+}
+
+.track-list.virtual .track-row {
+  position: absolute;
+  height: 74px;
+}
