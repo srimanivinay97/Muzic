@@ -351,6 +351,7 @@ function toTrack(record) {
     album: cleanText(record.album),
     artist: cleanText(record.artist),
     format: record.format,
+    addedAt: record.addedAt || 0,
     artUrl,
     artBlob: record.artBlob || null,
     hue: hashHue(title),
@@ -578,13 +579,38 @@ $('title-btn').addEventListener('click', () => {
 // ============================================================
 // Main screen rendering
 // ============================================================
+// Alphabetical order by title. numeric:true puts "Song 2" before "Song 10",
+// and sensitivity:'base' ignores upper/lower case when comparing.
+// Compares text the way a person expects: case-insensitive, and numbers sorted by value
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+// Empty text (no artist or movie tag) is compared last, so real names come first
+function compareText(x, y) {
+  if (!x && y) return 1;
+  if (x && !y) return -1;
+  return nameCollator.compare(x, y);
+}
+
+const SORT_KEY = 'glass-music-sort';
+const SORT_MODES = {
+  name:   { label: 'Name',           cmp: (a, b) => compareText(a.title, b.title) },
+  artist: { label: 'Artist',         cmp: (a, b) => compareText(a.artist, b.artist) || compareText(a.title, b.title) },
+  movie:  { label: 'Movie',          cmp: (a, b) => compareText(a.album, b.album) || compareText(a.title, b.title) },
+  added:  { label: 'Recently added', cmp: (a, b) => b.addedAt - a.addedAt }, // newest first
+};
+let sortMode = 'name';
+
+function sortedTracks(list) {
+  return list.slice().sort(SORT_MODES[sortMode].cmp);
+}
+
 function currentListIds() {
-  if (view === 'library') return tracks.map((t) => t.id);
+  if (view === 'library') return sortedTracks(tracks).map((t) => t.id);
 
   if (view === 'search') {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return tracks.map((t) => t.id);
-    return tracks
+    if (!q) return sortedTracks(tracks).map((t) => t.id);
+    return sortedTracks(tracks)
       .filter((t) => t.title.toLowerCase().includes(q)
         || t.album.toLowerCase().includes(q)
         || t.artist.toLowerCase().includes(q))
@@ -628,6 +654,8 @@ function renderMain() {
   $('title-btn').disabled = !isLibrary;
 
   $('back-btn').hidden = !isPlaylist;
+  $('sort-btn').hidden = isPlaylists || isPlaylist;
+  $('sort-btn').textContent = 'Sort: ' + SORT_MODES[sortMode].label;
   $('add-btn').hidden = !isLibrary;
   $('new-playlist-btn').hidden = !isPlaylists;
   $('playlist-tools').hidden = !isPlaylist;
@@ -991,6 +1019,41 @@ onTap('playlist-shuffle', () => {
 
 onTap('playlist-more', openPlaylistOptions);
 onTap('new-playlist-btn', () => openNewPlaylist(null));
+
+// ============================================================
+// Sort menu
+// ============================================================
+function setSortMode(key) {
+  if (!SORT_MODES[key]) return;
+  sortMode = key;
+  try {
+    localStorage.setItem(SORT_KEY, key); // Remembered for next time
+  } catch (err) {
+    // Storage blocked: the choice lasts for this visit only
+  }
+  renderMain();
+}
+
+function loadSortMode() {
+  try {
+    const saved = localStorage.getItem(SORT_KEY);
+    if (saved && SORT_MODES[saved]) sortMode = saved;
+  } catch (err) {
+    // Use the default
+  }
+}
+
+function openSortSheet() {
+  openSheet({
+    title: 'Sort Songs',
+    actions: Object.entries(SORT_MODES).map(([key, mode]) => ({
+      label: (key === sortMode ? '✓  ' : '      ') + mode.label,
+      onClick: () => setSortMode(key),
+    })),
+  });
+}
+
+onTap('sort-btn', openSortSheet);
 
 // ============================================================
 // Removing a song from the library
@@ -1587,6 +1650,7 @@ window.addEventListener('pagehide', () => saveState(true));
 // Start up
 // ============================================================
 async function init() {
+  loadSortMode();
   setIcons();
   setPlayIcons(false);
   setShuffleState();
