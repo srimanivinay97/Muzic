@@ -126,6 +126,8 @@ let repeatMode = 0;
 let queueOpen = false;
 let seeking = false;
 let pendingSeek = null;
+let seekTarget = null;    // Where a drag asked the song to go, until the browser confirms it
+let trackLoading = false; // True between starting a new song and learning its length
 let wantPlaying = false;
 let errorStreak = 0;
 let uiDirty = false;
@@ -1855,7 +1857,12 @@ function switchTo(id) {
   const prevId = currentId;
   currentId = id;
   pendingSeek = null;
+  seekTarget = null;
+  seeking = false;          // A new song starts with the scrubber free to follow it
   wantPlaying = true;
+  trackLoading = true;      // Blocks stale position reports until the new length is known
+  setPositionZero();        // Lock screen clock restarts at 0 for the new song
+  resetProgressUI();        // In-app bar starts empty instead of holding the last song's fill
 
   loadAndPlay(track);
 
@@ -2085,7 +2092,11 @@ function updateTimes() {
   const t = pendingSeek !== null ? pendingSeek : audio.currentTime;
   if (!isFinite(d) || d === 0) {
     tNow.textContent = formatTime(t);
-    if (!seeking) setScrubFill(0);   // A song whose length isn't known yet shows an empty bar
+    if (!seeking) {
+      setScrubFill(0);                      // A song whose length isn't known yet shows an empty bar
+      progress.value = 0;
+      miniBar.style.transform = 'scaleX(0)';
+    }
     return;
   }
   const fraction = Math.min(t / d, 1);
@@ -2101,6 +2112,15 @@ function updateTimes() {
 // Sets the --pct variable the scrubber's CSS uses to fill its left side
 function setScrubFill(fraction) {
   progress.style.setProperty('--pct', `${Math.max(0, Math.min(1, fraction)) * 100}%`);
+}
+
+// Puts the scrubber, the mini bar and both timestamps back to the start of a song
+function resetProgressUI() {
+  progress.value = 0;
+  setScrubFill(0);
+  miniBar.style.transform = 'scaleX(0)';
+  tNow.textContent = formatTime(0);
+  tLeft.textContent = '-0:00';
 }
 
 // ============================================================
@@ -2196,6 +2216,7 @@ audio.addEventListener('pause', () => {
 
 // Once a restored song knows its length, jump to where it stopped last time
 audio.addEventListener('loadedmetadata', () => {
+  trackLoading = false;   // The new length is known, so reports are trustworthy again
   if (pendingSeek !== null && isFinite(audio.duration)) {
     audio.currentTime = Math.min(pendingSeek, Math.max(0, audio.duration - 1));
     pendingSeek = null;
@@ -2226,9 +2247,16 @@ audio.addEventListener('ended', () => {
 });
 
 audio.addEventListener('error', () => {
+  trackLoading = false;   // Don't leave the clock frozen on a song that failed to load
   const track = byId(currentId);
   if (!track || !audio.getAttribute('src')) return;
   handleBrokenTrack(track);
+});
+
+// A safety net: whenever the length becomes known, reports are safe again. This also
+// covers browsers that report a duration without firing loadedmetadata first.
+audio.addEventListener('durationchange', () => {
+  if (isFinite(audio.duration) && audio.duration > 0) trackLoading = false;
 });
 
 // ============================================================
@@ -2242,13 +2270,30 @@ progress.addEventListener('input', () => {
   }
 });
 
+// Seeking is confirmed by the browser's own "seeked" event. Until then the scrubber
+// keeps the position the user chose, so an old timeupdate can't pull it backwards.
 progress.addEventListener('change', () => {
   if (isFinite(audio.duration)) {
-    audio.currentTime = (progress.value / 1000) * audio.duration;
+    seekTarget = (progress.value / 1000) * audio.duration;
     pendingSeek = null;
+    audio.currentTime = seekTarget;
+    updatePositionState();   // Lock screen jumps to the new spot straight away
+  } else {
+    seeking = false;
   }
-  seeking = false;
   saveState(true);
+});
+
+audio.addEventListener('seeked', () => {
+  // Some iOS versions land a little off the target, so correct it once if needed
+  if (seekTarget !== null && Math.abs(audio.currentTime - seekTarget) > 1.5 && isFinite(audio.duration)) {
+    audio.currentTime = seekTarget;
+    return;
+  }
+  seekTarget = null;
+  seeking = false;
+  updatePositionState();
+  if (!document.hidden) updateTimes();
 });
 
 // ============================================================
@@ -2305,8 +2350,23 @@ function setPlaybackState(state) {
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
 }
 
+// Wipes the lock screen's clock the moment a new song starts loading. Without this the
+// notification keeps counting the song that just finished, because the new song's length
+// isn't known until "loadedmetadata" fires a moment later.
+function setPositionZero() {
+  if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+  try {
+    navigator.mediaSession.setPositionState();   // No argument clears the old position
+  } catch (err) {
+    // Ignore browsers that reject this
+  }
+}
+
 function updatePositionState() {
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+  // While a new song is still loading, audio.duration can briefly still be the previous
+  // song's. Reporting it would make the lock screen count the song that already finished.
+  if (trackLoading) return;
   const d = audio.duration;
   if (!isFinite(d) || d <= 0) return;
   try {

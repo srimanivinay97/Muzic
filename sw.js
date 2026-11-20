@@ -6,7 +6,7 @@
 // 2. Keeps a copy of those files, so the app still opens offline.
 // ============================================================
 
-const CACHE = 'glass-music-v2';
+const CACHE = 'glass-music-v3';
 const CORE = ['./', './index.html', './style.css', './app.js', './manifest.json', './apple-touch-icon.png', './icon-192.png'];
 const CDN_HOST = 'cdnjs.cloudflare.com';
 
