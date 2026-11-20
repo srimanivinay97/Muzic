@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Music</title>
 
-  <!-- iOS "Add to Home Screen" settings -->
+  <!-- Home screen app settings -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Music">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#7a0014">
+  <!-- Older iOS uses this for the status bar. iOS 26 uses the page background instead -->
+  <meta id="theme-color" name="theme-color" content="#a3001a">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -25,7 +30,11 @@
     <header class="top">
       <button id="back-btn" class="round-btn" aria-label="Back to playlists" hidden></button>
       <div class="top-text">
-        <h1 id="page-title">Library</h1>
+        <!-- Tapping the title on the Library tab reloads the app with the newest version -->
+        <button id="title-btn" class="title-btn" aria-label="Refresh app">
+          <h1 id="page-title">Library</h1>
+          <span id="refresh-icon" class="refresh-icon"></span>
+        </button>
         <p id="count" class="count"></p>
       </div>
       <div class="top-actions">
@@ -42,9 +51,9 @@
     <input id="file-input" type="file" multiple hidden
            accept=".mp3,.m4a,.mp4,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf,audio/*">
 
-    <input id="search" class="search glass" type="search" placeholder="Songs, albums, artists" hidden>
+    <input id="search" class="search glass" type="search" placeholder="Songs, movies, singers" hidden>
 
-    <section id="empty" class="empty">
+    <section id="empty" class="empty" hidden>
       <h2>Your library is empty</h2>
       <p>Add songs from your device. MP3, M4A, FLAC, AAC, and WAV files are supported.</p>
       <button id="empty-add" class="btn primary">Choose Songs</button>
@@ -126,7 +135,7 @@
 
   <div id="toast" class="toast glass" hidden></div>
 
-  <!-- Hidden switch used to trigger haptic feedback on supported iPhones -->
+  <!-- Hidden switch that iPhone Safari turns into a small haptic tap -->
   <label id="haptic-label" class="haptic-label" aria-hidden="true">
     <input type="checkbox" switch tabindex="-1">
   </label>

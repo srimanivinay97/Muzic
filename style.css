@@ -18,10 +18,18 @@
   --edge: rgba(255, 255, 255, 0.26);
   --shine: rgba(255, 255, 255, 0.4);
   --red: #b0001c;
+  --top-red: #a3001a;
 
-  /* Player colors. app.js replaces these with colors taken from each song's cover */
+  /* Player colors. app.js replaces these with colors from each song's cover */
   --p1: #9b0a1f;
   --p2: #2a0208;
+}
+
+/* iOS 26 colors the status bar from the page's background COLOR.
+   A gradient alone counts as an image, so the color must be set too,
+   otherwise the status bar area turns white. */
+html {
+  background-color: var(--top-red);
 }
 
 html,
@@ -37,8 +45,15 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: linear-gradient(170deg, #c4001f 0%, #7a0014 55%, #2b0208 100%);
+  -webkit-tap-highlight-color: transparent;
+  background-color: var(--top-red);
+  background-image: linear-gradient(170deg, #c4001f 0%, #7a0014 55%, #2b0208 100%);
   background-attachment: fixed;
+}
+
+/* Stops the page behind from scrolling while the player or a sheet is open */
+body.locked {
+  overflow: hidden;
 }
 
 button,
@@ -79,6 +94,17 @@ button {
 @keyframes drift {
   from { transform: translate(0, 0); }
   to   { transform: translate(6vmax, 5vmax); }
+}
+
+/* Saves battery: no moving background while the player covers it, or if the user prefers less motion */
+body.locked .blob {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob {
+    animation: none;
+  }
 }
 
 /* ============================================================
@@ -124,12 +150,52 @@ button {
   gap: 8px;
 }
 
+/* The title is a button so it can refresh the app */
+.title-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.title-btn:disabled {
+  cursor: default;
+}
+
 h1 {
   margin: 0;
+  min-width: 0;
   font-size: clamp(30px, 7vw, 44px);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.refresh-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.refresh-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.refresh-icon.spin svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .count {
@@ -222,7 +288,7 @@ h1 {
 }
 
 /* ============================================================
-   LISTS (songs, playlists)
+   LISTS (songs, playlists, up next)
    One column on phones, a responsive grid on wider screens
    ============================================================ */
 .track-list,
@@ -236,7 +302,8 @@ h1 {
   gap: 2px;
 }
 
-.track-row {
+.track-row,
+.queue-row {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -248,7 +315,9 @@ h1 {
 }
 
 .track-row:hover,
-.track-row:active {
+.track-row:active,
+.queue-row:hover,
+.queue-row:active {
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -282,9 +351,9 @@ h1 {
   align-items: center;
   gap: 8px;
   margin-top: 3px;
+  min-width: 0;
   font-size: 13px;
   color: var(--dim);
-  min-width: 0;
 }
 
 .track-sub > span:last-child {
@@ -347,16 +416,26 @@ h1 {
 }
 
 /* ============================================================
-   ARTWORK (cover art, or a color tile made from the song name)
+   ARTWORK (cover image, or a color tile made from the song name)
    ============================================================ */
 .art {
+  position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 1 / 1;
   flex-shrink: 0;
+  overflow: hidden;
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.92);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* crops the cover to a square without stretching it */
 }
 
 .art svg {
@@ -369,6 +448,10 @@ h1 {
   border-radius: 11px;
 }
 
+.queue .art.row {
+  width: 46px;
+}
+
 .art.tiny {
   width: 42px;
   border-radius: 9px;
@@ -379,16 +462,6 @@ h1 {
   margin: 0 auto;
   border-radius: 24px;
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
-}
-
-.art.has-art {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.art.has-art svg {
-  display: none;
 }
 
 /* ============================================================
@@ -498,29 +571,42 @@ h1 {
   background: rgba(255, 255, 255, 0.15);
 }
 
+/* scaleX is cheaper to animate than width, because the browser doesn't redo the layout */
 .mini-progress span {
   display: block;
-  width: 0;
+  width: 100%;
   height: 100%;
   background: #fff;
+  transform: scaleX(0);
+  transform-origin: left center;
 }
 
 /* ============================================================
    FULL NOW PLAYING SHEET
-   Background comes from the song's cover art colors (--p1, --p2)
    ============================================================ */
 .full {
   position: fixed;
   inset: 0;
   z-index: 50;
   overflow-y: auto;
-  background: linear-gradient(180deg, var(--p1) 0%, var(--p2) 100%);
+  overscroll-behavior: contain;
+  scrollbar-width: none;                /* hides the scrollbar in Firefox */
+  /* background-color is what iOS 26 uses for the status bar tint */
+  background-color: var(--p1);
+  background-image: linear-gradient(180deg, var(--p1) 0%, var(--p2) 100%);
   transform: translateY(100%);
-  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  visibility: hidden;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.5s;
+}
+
+.full::-webkit-scrollbar {
+  display: none;                        /* hides the scrollbar in Safari */
 }
 
 .full.open {
   transform: translateY(0);
+  visibility: visible;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s;
 }
 
 .full-inner {
@@ -559,13 +645,13 @@ h1 {
 
 .pill-btn.on {
   background: #ffffff;
-  color: var(--red);
+  color: #1a1a1a;
 }
 
 .pill-icon svg {
+  display: block;
   width: 18px;
   height: 18px;
-  display: block;
 }
 
 .queue {
@@ -573,28 +659,14 @@ h1 {
   padding: 10px;
   overflow-y: auto;
   border-radius: 22px;
+  scrollbar-width: none;
 }
 
-.queue-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 8px;
-  border-radius: 14px;
-  cursor: pointer;
+.queue::-webkit-scrollbar {
+  display: none;
 }
 
-.queue-row:hover,
-.queue-row:active {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.queue-row .track-text {
-  min-width: 0;
-}
-
-/* Hide the cover while the Up Next list is open, so the list has room */
+/* Hide the cover while Up Next is open, so the list has room */
 .full.show-queue .fp-left {
   display: none;
 }
@@ -655,9 +727,9 @@ h1 {
 }
 
 .ctrl svg {
+  display: block;
   width: 26px;
   height: 26px;
-  display: block;
 }
 
 .ctrl.small {
@@ -671,15 +743,15 @@ h1 {
   height: 20px;
 }
 
-.ctrl.on {
+/* Shuffle or repeat turned on: white icon on a soft circle */
+.ctrl.small.on {
   color: #ffffff;
-  text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .ctrl.huge {
   width: 80px;
   height: 80px;
-  padding-left: 4px;
   background: var(--glass);
   border: 1px solid var(--edge);
   backdrop-filter: blur(16px);
@@ -735,18 +807,20 @@ h1 {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 12px;
-  background: rgba(20, 0, 4, 0.45);
+  padding: 12px 12px calc(env(safe-area-inset-bottom) + 12px);
+  background-color: rgba(20, 0, 4, 0.5);
 }
 
 .sheet-card {
   width: min(520px, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 18px;
   border-radius: 24px;
-  background: rgba(70, 4, 16, 0.9);
+  background: rgba(70, 4, 16, 0.92);
   border: 1px solid var(--edge);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
@@ -788,6 +862,7 @@ h1 {
 }
 
 .sheet-btn {
+  flex-shrink: 0;
   padding: 14px;
   border: none;
   border-radius: 14px;
@@ -819,6 +894,8 @@ h1 {
 
 /* ============================================================
    TOAST
+   A solid color is set, because iOS 26 can tint the status bar from
+   a fixed element near the top, and a see-through one would turn it white
    ============================================================ */
 .toast {
   position: fixed;
@@ -829,14 +906,14 @@ h1 {
   width: min(420px, calc(100% - 32px));
   padding: 12px 18px;
   border-radius: 16px;
+  background-color: rgba(90, 0, 18, 0.92);
   font-size: 14px;
   line-height: 1.4;
   text-align: center;
 }
 
 /* ============================================================
-   HAPTIC TRIGGER
-   Visually hidden switch that iPhone Safari can turn into a tap
+   HAPTIC TRIGGER (visually hidden switch)
    ============================================================ */
 .haptic-label {
   position: fixed;
@@ -847,10 +924,4 @@ h1 {
   overflow: hidden;
   opacity: 0.01;
   pointer-events: none;
-}
-
-/* Icons for tabs and rows */
-.pill-icon svg,
-.tab-icon svg {
-  stroke-width: 2;
 }
