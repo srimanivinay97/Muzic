@@ -582,3 +582,52 @@ h1 {
   line-height: 1.4;
   text-align: center;
 }
+
+/* ============================================================
+   ICONS AND ALBUM ART
+   ============================================================ */
+.ctrl svg,
+.mini-btn svg {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+
+.ctrl.small svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ctrl.huge svg {
+  width: 30px;
+  height: 30px;
+}
+
+.mini-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.tab-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  margin: 0 auto;
+}
+
+.art svg {
+  width: 42%;
+  height: 42%;
+  opacity: 0.9;
+}
+
+/* Cover art fills the tile and is cropped to a square */
+.art.has-art {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.art.has-art svg {
+  display: none;
+}

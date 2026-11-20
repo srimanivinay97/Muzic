@@ -14,7 +14,6 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Soft colored blobs behind the glass -->
   <div class="backdrop" aria-hidden="true">
     <span class="blob b1"></span>
     <span class="blob b2"></span>
@@ -30,7 +29,6 @@
       <button id="add-btn" class="btn primary">Add songs</button>
     </header>
 
-    <!-- The accept list names each extension, because iOS hides some audio files when only audio/* is given -->
     <input id="file-input" type="file" multiple hidden
            accept=".mp3,.m4a,.mp4,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf,audio/*">
 
@@ -51,18 +49,18 @@
       <div id="mini-art" class="art tiny"></div>
       <div id="mini-title" class="mini-title"></div>
     </button>
-    <button id="mini-play" class="mini-btn" aria-label="Play or pause">▶</button>
-    <button id="mini-next" class="mini-btn" aria-label="Next track">⏭</button>
+    <button id="mini-play" class="mini-btn" aria-label="Play or pause"></button>
+    <button id="mini-next" class="mini-btn" aria-label="Next track"></button>
     <div class="mini-progress"><span id="mini-bar"></span></div>
   </div>
 
   <!-- ===== Tab bar ===== -->
   <nav class="tab-bar glass">
     <button class="tab active" data-tab="library">
-      <span class="tab-icon">♫</span><span>Library</span>
+      <span class="tab-icon" data-icon="note"></span><span>Library</span>
     </button>
     <button class="tab" data-tab="search">
-      <span class="tab-icon">⌕</span><span>Search</span>
+      <span class="tab-icon" data-icon="search"></span><span>Search</span>
     </button>
   </nav>
 
@@ -90,11 +88,11 @@
         </div>
 
         <div class="fp-controls">
-          <button id="shuffle" class="ctrl small" aria-label="Shuffle">⇄</button>
-          <button id="prev" class="ctrl" aria-label="Previous track">⏮</button>
-          <button id="play" class="ctrl huge" aria-label="Play or pause">▶</button>
-          <button id="next" class="ctrl" aria-label="Next track">⏭</button>
-          <button id="repeat" class="ctrl small" aria-label="Repeat">↻</button>
+          <button id="shuffle" class="ctrl small" aria-label="Shuffle"></button>
+          <button id="prev" class="ctrl" aria-label="Previous track"></button>
+          <button id="play" class="ctrl huge" aria-label="Play or pause"></button>
+          <button id="next" class="ctrl" aria-label="Next track"></button>
+          <button id="repeat" class="ctrl small" aria-label="Repeat"></button>
         </div>
       </div>
     </div>
@@ -103,6 +101,9 @@
   <div id="toast" class="toast glass" hidden></div>
 
   <audio id="audio" preload="metadata"></audio>
+
+  <!-- Reads title and cover art from MP3, M4A and other tagged files -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
