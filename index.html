@@ -28,7 +28,7 @@
   <!-- ===== Main screen ===== -->
   <main class="screen">
     <header class="top">
-      <button id="back-btn" class="round-btn" aria-label="Back to playlists" hidden></button>
+      <button id="back-btn" class="round-btn" aria-label="Go back" hidden></button>
       <div class="top-text">
         <!-- Tapping the title on the Library tab reloads the app with the newest version -->
         <button id="title-btn" class="title-btn" aria-label="Refresh app">
@@ -38,19 +38,22 @@
         <p id="count" class="count"></p>
       </div>
       <div class="top-actions">
-        <button id="sort-btn" class="btn" hidden></button>
-        <button id="add-btn" class="btn primary">Add Songs</button>
-        <button id="new-playlist-btn" class="btn primary" hidden>New Playlist</button>
+        <button id="sort-btn" class="round-btn" aria-label="Sort songs" hidden></button>
+        <button id="add-btn" class="round-btn" aria-label="Add songs" hidden></button>
+        <button id="new-playlist-btn" class="round-btn" aria-label="New playlist" hidden></button>
+        <button id="menu-btn" class="round-btn" aria-label="More options" hidden></button>
       </div>
     </header>
 
-    <div id="playlist-tools" class="playlist-tools" hidden>
-      <button id="playlist-shuffle" class="btn primary">Shuffle Play</button>
-      <button id="playlist-more" class="round-btn" aria-label="Playlist options"></button>
+    <div id="list-tools" class="list-tools" hidden>
+      <button id="list-shuffle" class="btn primary">Shuffle Play</button>
+      <button id="list-play" class="btn">Play All</button>
+      <button id="list-more" class="round-btn" aria-label="List options" hidden></button>
     </div>
 
     <input id="file-input" type="file" multiple hidden
            accept=".mp3,.m4a,.mp4,.m4b,.aac,.flac,.wav,.aif,.aiff,.caf,audio/*">
+    <input id="import-input" type="file" accept=".json,application/json" hidden>
 
     <input id="search" class="search glass" type="search" placeholder="Songs, movies, singers" hidden>
 
@@ -60,7 +63,7 @@
       <button id="empty-add" class="btn primary">Choose Songs</button>
     </section>
 
-    <ul id="playlist-list" class="playlist-list" hidden></ul>
+    <ul id="group-list" class="playlist-list" hidden></ul>
     <ul id="track-list" class="track-list"></ul>
   </main>
 
@@ -78,10 +81,13 @@
   <!-- ===== Tab bar ===== -->
   <nav class="tab-bar glass">
     <button class="tab active" data-tab="library">
-      <span class="tab-icon" data-icon="note"></span><span>Library</span>
+      <span class="tab-icon" data-icon="note"></span><span>Songs</span>
+    </button>
+    <button class="tab" data-tab="movies">
+      <span class="tab-icon" data-icon="movie"></span><span>Movies</span>
     </button>
     <button class="tab" data-tab="playlists">
-      <span class="tab-icon" data-icon="playlist"></span><span>Playlists</span>
+      <span class="tab-icon" data-icon="playlist"></span><span>Lists</span>
     </button>
     <button class="tab" data-tab="search">
       <span class="tab-icon" data-icon="search"></span><span>Search</span>
@@ -93,9 +99,13 @@
     <div class="full-inner">
       <div class="fp-top">
         <button id="close-full" class="round-btn" aria-label="Close Now Playing"></button>
-        <button id="queue-btn" class="pill-btn" aria-label="Show up next">
-          <span class="pill-icon"></span>Up Next
-        </button>
+        <div class="fp-top-right">
+          <button id="sleep-btn" class="round-btn" aria-label="Sleep timer"></button>
+          <button id="fav-btn" class="round-btn" aria-label="Add to favorites"></button>
+          <button id="queue-btn" class="pill-btn" aria-label="Show up next">
+            <span class="pill-icon"></span>Up Next
+          </button>
+        </div>
       </div>
 
       <section id="queue-panel" class="queue glass" hidden>
@@ -127,6 +137,8 @@
           <button id="next" class="ctrl" aria-label="Next track"></button>
           <button id="repeat" class="ctrl small" aria-label="Repeat"></button>
         </div>
+
+        <p id="sleep-status" class="sleep-status" hidden></p>
       </div>
     </div>
   </section>
@@ -135,13 +147,18 @@
   <div id="sheet" class="sheet" hidden></div>
 
   <div id="toast" class="toast glass" hidden></div>
+  <button id="update-banner" class="update-banner" hidden>Update ready · Tap to reload</button>
 
   <!-- Hidden switch that iPhone Safari turns into a small haptic tap -->
   <label id="haptic-label" class="haptic-label" aria-hidden="true">
     <input type="checkbox" switch tabindex="-1">
   </label>
 
-  <audio id="audio" preload="metadata"></audio>
+  <!-- Two players: one plays the current song while the next is pre-loaded in the other.
+       Swapping between ready players survives iOS background limits better than
+       changing the source of a single player. -->
+  <audio id="audio-a" preload="metadata"></audio>
+  <audio id="audio-b" preload="metadata"></audio>
 
   <!-- Reads title, album, artist and cover art from tagged audio files -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>

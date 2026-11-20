@@ -5,10 +5,15 @@
 // ============================================================
 const $ = (id) => document.getElementById(id);
 
-const audio = $('audio');
+const audioA = $('audio-a');
+const audioB = $('audio-b');
+let audio = audioA;           // The player currently making sound
+let idle = audioB;            // The other player, holding the next song ready
+
 const fileInput = $('file-input');
+const importInput = $('import-input');
 const trackList = $('track-list');
-const playlistList = $('playlist-list');
+const groupList = $('group-list');
 const emptyBox = $('empty');
 const searchEl = $('search');
 const progress = $('progress');
@@ -23,13 +28,23 @@ const tLeft = $('t-left');
 const SUPPORTED = new Set(['mp3', 'm4a', 'mp4', 'm4b', 'aac', 'flac', 'wav', 'aif', 'aiff', 'caf']);
 const STATE_KEY = 'glass-music-state';
 const SORT_KEY = 'glass-music-sort';
+const FAV_KEY = 'glass-music-favorites';
+const RECENT_KEY = 'glass-music-recent';
 const HOME_COLOR = '#a3001a';
 
+// Built-in lists that behave like playlists but are generated, not saved
+const FAV_ID = '__favorites__';
+const RECENT_ID = '__recent__';
+const RECENT_MAX = 50;
+
 // Song list layout (must match the sizes in style.css)
-const ROW_H = 74;             // Height of one song row
-const ROW_PITCH = 78;         // Row height plus the gap between rows
-const GRID_MIN = 320;         // Narrowest a column can be on wide screens
-const GRID_GAP = 14;          // Space between columns on wide screens
+const ROW_H = 74;
+const ROW_PITCH = 78;
+const GRID_MIN = 320;
+const GRID_GAP = 14;
+
+// A fraction of a second of silence, used once to let iOS unlock both players
+const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
 // ============================================================
 // Icons (SVG). "filled" icons use solid shapes, others use outlines
@@ -53,17 +68,33 @@ const ICON = {
   note: svg('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),
   search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/>'),
   playlist: svg('<path d="M4 6h11M4 11h11M4 16h7"/><path d="M19 13v6.5"/><circle cx="16.5" cy="19.5" r="2.5"/>'),
+  movie: svg('<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M7 5v14M17 5v14M2.5 12h19M2.5 8.5h4.5M2.5 15.5h4.5M17 8.5h4.5M17 15.5h4.5"/>'),
   queue: svg('<path d="M4 6h16M4 12h10M4 18h7"/>'),
   more: svg('<circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>', true),
   back: svg('<path d="M15 18l-6-6 6-6"/>'),
   chevronDown: svg('<path d="m6 9 6 6 6-6"/>'),
   refresh: svg('<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  sort: svg('<path d="M7 4v16M7 20l-3.5-3.5M7 20l3.5-3.5"/><path d="M14 7h7M14 12h5M14 17h3"/>'),
+  heart: svg('<path d="M12 20s-7.5-4.6-9.3-9A5 5 0 0 1 12 6.2 5 5 0 0 1 21.3 11c-1.8 4.4-9.3 9-9.3 9z"/>'),
+  heartFull: svg('<path d="M12 20.3s-7.8-4.8-9.6-9.3A5.2 5.2 0 0 1 12 6a5.2 5.2 0 0 1 9.6 5c-1.8 4.5-9.6 9.3-9.6 9.3z"/>', true),
+  timer: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/>'),
+  download: svg('<path d="M12 3v12"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/>'),
+  upload: svg('<path d="M12 15V3"/><path d="m7.5 7.5 4.5-4.5 4.5 4.5"/><path d="M4 20h16"/>'),
+  clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+  trash: svg('<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/>'),
 };
 
 function setIcons() {
   $('back-btn').innerHTML = ICON.back;
   $('close-full').innerHTML = ICON.chevronDown;
-  $('playlist-more').innerHTML = ICON.more;
+  $('list-more').innerHTML = ICON.more;
+  $('menu-btn').innerHTML = ICON.more;
+  $('sort-btn').innerHTML = ICON.sort;
+  $('add-btn').innerHTML = ICON.plus;
+  $('new-playlist-btn').innerHTML = ICON.plus;
+  $('sleep-btn').innerHTML = ICON.timer;
+  $('fav-btn').innerHTML = ICON.heart;
   $('shuffle').innerHTML = ICON.shuffle;
   $('prev').innerHTML = ICON.prev;
   $('next').innerHTML = ICON.next;
@@ -71,6 +102,7 @@ function setIcons() {
   $('refresh-icon').innerHTML = ICON.refresh;
   document.querySelector('#queue-btn .pill-icon').innerHTML = ICON.queue;
   document.querySelector('[data-icon="note"]').innerHTML = ICON.note;
+  document.querySelector('[data-icon="movie"]').innerHTML = ICON.movie;
   document.querySelector('[data-icon="playlist"]').innerHTML = ICON.playlist;
   document.querySelector('[data-icon="search"]').innerHTML = ICON.search;
 }
@@ -78,48 +110,49 @@ function setIcons() {
 // ============================================================
 // State
 // ============================================================
-// Each track in memory holds only small details (title, artist, flags).
-// The audio file and cover image are loaded from storage only when they are needed.
-let tracks = [];              // Songs in the order they were added
-const trackMap = new Map();   // id -> track, for instant lookups
-let playlists = [];           // Each: { id, name, trackIds, createdAt }
+let tracks = [];
+const trackMap = new Map();
+let playlists = [];
 
-let view = 'library';         // 'library' | 'search' | 'playlists' | 'playlist'
+let view = 'library';     // library | movies | playlists | search | playlist | album
 let activeTab = 'library';
 let viewPlaylistId = null;
+let viewAlbum = null;
 let searchQuery = '';
 
-// base = the list being played in normal order, order = the actual play order (shuffled or not)
 let base = [];
 let order = [];
 let currentId = null;
 
 let shuffleOn = false;
-let repeatMode = 0;           // 0 = off, 1 = repeat all, 2 = repeat one
+let repeatMode = 0;
 let queueOpen = false;
 let seeking = false;
-let pendingSeek = null;       // Saved position to jump to once a restored song has loaded
-let wantPlaying = false;      // True when the user expects music to be playing
-let errorStreak = 0;          // Songs that failed in a row, to stop skipping forever
-let uiDirty = false;          // True when the screen needs updating after coming back from the background
+let pendingSeek = null;
+let wantPlaying = false;
+let errorStreak = 0;
+let uiDirty = false;
 let lastSave = 0;
 let db = null;
 let toastTimer = null;
 let storageText = '';
 let sortMode = 'name';
 
-const rowById = new Map();    // id -> its row element, for the rows currently on screen
-const artPending = new Map(); // id -> promise, so one cover is never loaded twice at the same time
+let favorites = new Set();
+let recent = [];
 
-// Virtual list: only the rows near the screen exist in the page
-const virt = {
-  ids: [],            // Every song id in the list, in display order
-  inPlaylist: false,
-  cols: 1,            // Columns: 1 on phones, more on wide screens
-  rows: 0,
-  els: new Map(),     // index in ids -> the row element currently built for it
-  frame: 0,           // Pending animation frame, so scroll events are handled once per frame
-};
+let sleepTimer = null;      // Countdown handle
+let sleepEndsAt = 0;        // When the timer finishes, in milliseconds
+let sleepAtTrackEnd = false;
+let sleepTick = null;
+
+let keepAliveCtx = null;
+let audioUnlocked = false;
+
+const rowById = new Map();
+const artPending = new Map();
+
+const virt = { ids: [], context: 'library', cols: 1, rows: 0, els: new Map(), frame: 0 };
 
 // ============================================================
 // Helpers
@@ -130,7 +163,6 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// Turns text into a number from 0 to 359 for a color. Same text always gives the same color
 function hashHue(text) {
   let h = 0;
   for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360;
@@ -153,25 +185,34 @@ function getExtension(name) {
   return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
 }
 
-// Removes website names that download sites add to tags,
-// e.g. "Manakanna Podichey - TeluguWap.Net" becomes "Manakanna Podichey".
-// A separator (- | : or a bracket) or "www." must come before the site name,
-// so real titles that happen to contain a dot are left alone.
+// Removes website names that download sites add to tags, e.g. "Song - TeluguWap.Net".
+// A separator or "www." must come first, so real titles containing a dot are left alone.
 const SITE_SUFFIX = /\s*(?:[-–—|:~]\s*[\[(]?|[\[(]|(?=www\.))\s*(?:www\.)?[a-z0-9-]+\.(?:com|net|org|in|info|co|me|cc|biz|xyz|fm|io|mobi|ws|tv|club|site|pk|live|guru|world|top|app|online)\b[^\])]*[\])]?\s*$/i;
 
 function cleanText(text) {
   if (!text) return '';
   const cleaned = text.replace(SITE_SUFFIX, '').trim();
-  return cleaned || text.trim(); // Never return an empty title
+  return cleaned || text.trim();
 }
 
-// Movie (album) name if it exists, otherwise the singer (artist)
 function subtitleFor(track) {
   return track.album || track.artist || 'Unknown';
 }
 
+function albumOf(track) {
+  return track.album || 'Unknown Movie';
+}
+
 function plural(n, word) {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+function formatSize(bytes) {
+  const mb = bytes / 1024 / 1024;
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+  if (mb >= 100) return `${Math.round(mb)} MB`;
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function showToast(message) {
@@ -182,7 +223,6 @@ function showToast(message) {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 }
 
-// Short vibration on Android, and the hidden-switch tap on recent iPhones
 function haptic() {
   if (navigator.vibrate) navigator.vibrate(12);
   $('haptic-label').click();
@@ -195,7 +235,6 @@ function onTap(id, fn) {
   });
 }
 
-// Sets the color iOS uses for the status bar area (the page's background color)
 function setTopColor(color) {
   document.documentElement.style.backgroundColor = color;
   document.body.style.backgroundColor = color;
@@ -206,10 +245,28 @@ function lockScroll() {
   document.body.classList.toggle('locked', fullPlayer.classList.contains('open') || !$('sheet').hidden);
 }
 
+// Reads a saved value that should be a list, returning an empty one if anything is wrong
+function readStoredList(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    // Storage blocked or full. The value lasts for this visit only
+  }
+}
+
 // ============================================================
 // Shuffle
-// crypto.getRandomValues gives high-quality random numbers. Fisher-Yates gives every order
-// an equal chance. A new order is made every time shuffle starts or a full pass ends.
+// crypto.getRandomValues gives high-quality random numbers. Fisher-Yates gives every
+// order an equal chance. A new order is made each time shuffle starts or a pass ends.
 // ============================================================
 function randomInt(max) {
   const buf = new Uint32Array(1);
@@ -238,7 +295,7 @@ function reshuffleAfterPass(list, lastId) {
 }
 
 // ============================================================
-// Metadata from the file (title, album, artist, cover art)
+// Metadata from the file
 // ============================================================
 function readTags(file) {
   return new Promise((resolve) => {
@@ -250,15 +307,13 @@ function readTags(file) {
   });
 }
 
-// Stores the cover as raw image bytes (a Blob), about 25% smaller than base64 text
 function pictureToBlob(picture) {
   const mime = picture.format && picture.format.includes('/') ? picture.format : 'image/jpeg';
   return new Blob([new Uint8Array(picture.data)], { type: mime });
 }
 
 // ============================================================
-// Cover art
-// The image is loaded from storage the first time it's shown, then kept as a link
+// Cover art, loaded from storage the first time it's shown
 // ============================================================
 function getArtUrl(track) {
   if (track.artUrl) return Promise.resolve(track.artUrl);
@@ -277,8 +332,8 @@ function getArtUrl(track) {
   return artPending.get(track.id);
 }
 
-// Fills an artwork tile. The color tile shows first, and the cover replaces it once loaded.
-// The dataset check stops a late image from landing in a tile that now shows a different song.
+// The color tile shows first, and the cover replaces it once loaded. The dataset check
+// stops a slow image from landing in a tile that now shows a different song.
 function fillArt(el, track) {
   el.dataset.artFor = track.id;
   el.style.background = gradientCss(track.hue);
@@ -301,7 +356,6 @@ function fillArt(el, track) {
 
 // ============================================================
 // Player colors from the cover art
-// The image is shrunk to 24x24 and averaged. Colorful pixels count more than gray ones.
 // ============================================================
 function fallbackPalette(hue) {
   return [`hsl(${hue} 55% 30%)`, `hsl(${hue} 70% 12%)`];
@@ -351,19 +405,15 @@ async function applyPalette(track) {
     const url = await getArtUrl(track);
     track.palette = (url && (await extractPalette(url))) || fallbackPalette(track.hue);
   }
-  if (currentId !== track.id) return; // The song changed while the colors were being worked out
+  if (currentId !== track.id) return;
   fullPlayer.style.setProperty('--p1', track.palette[0]);
   fullPlayer.style.setProperty('--p2', track.palette[1]);
   if (fullPlayer.classList.contains('open')) setTopColor(track.palette[0]);
 }
 
 // ============================================================
-// Storage (IndexedDB)
-// Four stores, so the list loads fast and files are only read when played:
-//   songs     small details only (title, artist, flags)
-//   files     the audio file, one record per song
-//   art       the cover image, one record per song
-//   playlists playlist names and song lists
+// Storage (IndexedDB), split so the library list loads fast
+//   songs  small details     files  audio     art  covers     playlists
 // ============================================================
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -396,7 +446,6 @@ function dbGet(storeName, key) {
   return dbRun(storeName, 'readonly', (s) => s.get(key));
 }
 
-// Saves a song's details, file and cover in one transaction, so all three are saved or none are
 function saveSong(meta, fileBlob, artBlob) {
   return new Promise((resolve, reject) => {
     const stores = ['songs'];
@@ -413,7 +462,6 @@ function saveSong(meta, fileBlob, artBlob) {
   });
 }
 
-// Removes a song from every store that holds part of it
 function deleteSongRecords(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['songs', 'files', 'art'], 'readwrite');
@@ -426,14 +474,11 @@ function deleteSongRecords(id) {
   });
 }
 
-// Builds the in-memory track from a saved record.
-// The search text is built once here, so searching doesn't have to lowercase every title each time.
+// The search text is built once here, so searching doesn't lowercase every title each time
 function toTrack(rec) {
   const title = cleanText(rec.title);
   const album = cleanText(rec.album);
   const artist = cleanText(rec.artist);
-
-  // Songs saved by older versions kept their cover inside the song record, so count those too
   const hasArt = rec.hasArt !== undefined ? !!rec.hasArt : !!(rec.artBlob || rec.art);
 
   return {
@@ -446,12 +491,12 @@ function toTrack(rec) {
     hasArt,
     hue: hashHue(title),
     search: `${title} ${album} ${artist}`.toLowerCase(),
-    file: null,       // Only set for songs added during this visit (see handleFiles)
-    url: null,        // Playable link, made the first time the song is needed
-    artUrl: null,     // Cover link, made the first time the cover is shown
+    file: null,
+    url: null,
+    artUrl: null,
     failed: false,
     palette: null,
-    sessionArt: null, // Cover as text, made once for the lock screen
+    sessionArt: null,
   };
 }
 
@@ -460,7 +505,6 @@ function addTrack(track) {
   trackMap.set(track.id, track);
 }
 
-// Returns a playable link for the song. Reads the file from storage only if it isn't loaded yet
 async function fileUrlFor(track) {
   if (track.url) return track.url;
 
@@ -490,12 +534,39 @@ function openPicker() {
 $('add-btn').addEventListener('click', openPicker);
 $('empty-add').addEventListener('click', openPicker);
 
+// Warns when the chosen files are unlikely to fit in the space the browser allows
+async function hasRoomFor(bytes) {
+  if (!navigator.storage || !navigator.storage.estimate) return true;
+  try {
+    const { quota, usage } = await navigator.storage.estimate();
+    if (!quota) return true;
+    return bytes < (quota - usage) * 0.9; // A margin, because the browser needs room too
+  } catch (err) {
+    return true;
+  }
+}
+
 async function handleFiles() {
   const files = Array.from(fileInput.files);
-  fileInput.value = ''; // Lets the same file be chosen again later
+  fileInput.value = '';
+  if (!files.length) return;
 
+  const total = files.reduce((sum, f) => sum + f.size, 0);
+  if (!(await hasRoomFor(total))) {
+    openSheet({
+      title: 'Not enough space',
+      message: `These songs need about ${formatSize(total)}, which is more than your phone has free for this app. Try adding fewer songs, or remove some first.`,
+      actions: [{ label: 'Add them anyway', onClick: () => importFiles(files) }],
+    });
+    return;
+  }
+  importFiles(files);
+}
+
+async function importFiles(files) {
   let added = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const file of files) {
     const ext = getExtension(file.name);
@@ -512,7 +583,7 @@ async function handleFiles() {
       album: (tags && tags.album) || '',
       artist: (tags && tags.artist) || '',
       format: ext.toUpperCase(),
-      addedAt: Date.now() + added, // +added keeps files from one pick in order
+      addedAt: Date.now() + added,
       hasArt: !!artBlob,
       tagsRead: true,
     };
@@ -520,7 +591,7 @@ async function handleFiles() {
     try {
       await saveSong(meta, file, artBlob);
     } catch (err) {
-      // If saving fails (for example storage is full), the song still plays for this visit
+      failed++; // Usually storage is full. The song still plays for this visit
     }
 
     const track = toTrack(meta);
@@ -530,19 +601,19 @@ async function handleFiles() {
     added++;
   }
 
-  renderMain(); // One redraw at the end instead of one per song
+  renderMain();
   updateStorageInfo();
 
   const parts = [];
   if (added) parts.push(`Added ${plural(added, 'song')}`);
   if (skipped) parts.push(`${skipped} skipped (unsupported format)`);
+  if (failed) parts.push(`${failed} could not be saved (storage full)`);
   if (parts.length) showToast(parts.join('. ') + '.');
 }
 
 fileInput.addEventListener('change', handleFiles);
 
-// Moves songs saved by older versions into the new layout: the file and cover go into
-// their own stores, and the song record keeps only its details. Runs once, in the background.
+// Moves songs saved by older versions into the split layout. Runs once, in the background.
 async function migrateLegacy(records) {
   let changed = false;
 
@@ -555,7 +626,6 @@ async function migrateLegacy(records) {
     let artist = rec.artist || '';
     let artBlob = rec.artBlob || null;
 
-    // Older records may not have their tags read yet
     if (rec.file && !rec.tagsRead && window.jsmediatags) {
       const tags = await readTags(rec.file);
       if (tags) {
@@ -566,7 +636,6 @@ async function migrateLegacy(records) {
       }
     }
 
-    // The very oldest version stored the cover as text, which is converted to a Blob here
     if (!artBlob && typeof rec.art === 'string') {
       try {
         artBlob = await (await fetch(rec.art)).blob();
@@ -589,10 +658,9 @@ async function migrateLegacy(records) {
     try {
       await saveSong(meta, rec.file || null, artBlob);
     } catch (err) {
-      continue; // The old record is untouched, so the next visit can try again
+      continue;
     }
 
-    // Update the song already on screen with its new details
     const live = byId(rec.id);
     if (live) {
       const fresh = toTrack(meta);
@@ -610,14 +678,14 @@ async function migrateLegacy(records) {
 }
 
 // ============================================================
-// Storage usage shown under the Library title
+// Storage usage shown under the title
 // ============================================================
 async function updateStorageInfo() {
   storageText = '';
   if (navigator.storage && navigator.storage.estimate) {
     try {
       const { usage } = await navigator.storage.estimate();
-      if (usage) storageText = `${(usage / (1024 * 1024)).toFixed(usage > 1e9 ? 0 : 1)} MB used`;
+      if (usage) storageText = `${formatSize(usage)} used`;
     } catch (err) {
       // Not available in this browser
     }
@@ -626,12 +694,175 @@ async function updateStorageInfo() {
 }
 
 // ============================================================
+// Favorites and recently played
+// ============================================================
+function isFavorite(id) {
+  return favorites.has(id);
+}
+
+function toggleFavorite(id) {
+  if (favorites.has(id)) {
+    favorites.delete(id);
+    showToast('Removed from Favorites');
+  } else {
+    favorites.add(id);
+    showToast('Added to Favorites');
+  }
+  writeStored(FAV_KEY, [...favorites]);
+  updateFavButton();
+  renderMain();
+}
+
+function updateFavButton() {
+  const on = currentId ? isFavorite(currentId) : false;
+  const btn = $('fav-btn');
+  btn.innerHTML = on ? ICON.heartFull : ICON.heart;
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites');
+}
+
+function noteRecentlyPlayed(id) {
+  recent = [id, ...recent.filter((x) => x !== id)].slice(0, RECENT_MAX);
+  writeStored(RECENT_KEY, recent);
+}
+
+// ============================================================
+// Sleep timer
+// ============================================================
+function clearSleepTimer(quiet = false) {
+  clearTimeout(sleepTimer);
+  clearInterval(sleepTick);
+  sleepTimer = null;
+  sleepTick = null;
+  sleepEndsAt = 0;
+  sleepAtTrackEnd = false;
+  updateSleepUI();
+  if (!quiet) showToast('Sleep timer off');
+}
+
+function startSleepTimer(minutes) {
+  clearSleepTimer(true);
+  sleepEndsAt = Date.now() + minutes * 60000;
+  sleepTimer = setTimeout(sleepNow, minutes * 60000);
+  sleepTick = setInterval(updateSleepUI, 20000); // Refreshes the "in 24 min" text
+  updateSleepUI();
+  showToast(`Music stops in ${minutes} minutes`);
+}
+
+function startSleepAtTrackEnd() {
+  clearSleepTimer(true);
+  sleepAtTrackEnd = true;
+  updateSleepUI();
+  showToast('Music stops when this song ends');
+}
+
+function sleepNow() {
+  wantPlaying = false;
+  audio.pause();
+  clearSleepTimer(true);
+  showToast('Sleep timer finished');
+}
+
+function updateSleepUI() {
+  const btn = $('sleep-btn');
+  const status = $('sleep-status');
+  const active = sleepAtTrackEnd || sleepEndsAt > Date.now();
+
+  btn.classList.toggle('on', active);
+
+  if (!active) {
+    status.hidden = true;
+    return;
+  }
+
+  status.hidden = false;
+  if (sleepAtTrackEnd) {
+    status.textContent = 'Stopping when this song ends';
+  } else {
+    const mins = Math.max(1, Math.round((sleepEndsAt - Date.now()) / 60000));
+    status.textContent = `Stopping in ${plural(mins, 'minute')}`;
+  }
+}
+
+function openSleepSheet() {
+  const active = sleepAtTrackEnd || sleepEndsAt > Date.now();
+  const actions = [15, 30, 45, 60].map((m) => ({
+    label: `${m} minutes`,
+    onClick: () => startSleepTimer(m),
+  }));
+  actions.push({ label: 'When this song ends', onClick: startSleepAtTrackEnd });
+  if (active) actions.push({ label: 'Turn off timer', danger: true, onClick: () => clearSleepTimer() });
+
+  openSheet({ title: 'Sleep Timer', message: 'Music stops automatically.', actions });
+}
+
+// ============================================================
+// Background playback help
+// iOS blocks a web app from starting audio while it is in the background. Two things help:
+// 1. Both players are unlocked by the first tap, so neither needs fresh permission later.
+// 2. A silent tone keeps the app registered as actively playing between songs.
+// Neither is guaranteed. They are workarounds for a limitation in Safari itself.
+// ============================================================
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+
+  for (const el of [audioA, audioB]) {
+    if (el.getAttribute('src')) continue; // Don't disturb a player that already has a song
+    el.src = SILENT_WAV;
+    const p = el.play();
+    if (p && p.then) {
+      p.then(() => {
+        el.pause();
+        if (el.getAttribute('src') === SILENT_WAV) {
+          el.removeAttribute('src');
+          el.load();
+        }
+      }).catch(() => {
+        if (el.getAttribute('src') === SILENT_WAV) el.removeAttribute('src');
+      });
+    }
+  }
+}
+
+function startKeepAlive() {
+  try {
+    if (!keepAliveCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      keepAliveCtx = new Ctx();
+
+      const osc = keepAliveCtx.createOscillator();
+      const gain = keepAliveCtx.createGain();
+      osc.frequency.value = 30;        // Below what people can hear
+      gain.gain.value = 0.0001;        // Near silence, but not zero, so it counts as output
+      osc.connect(gain).connect(keepAliveCtx.destination);
+      osc.start();
+    }
+    if (keepAliveCtx.state === 'suspended') keepAliveCtx.resume();
+  } catch (err) {
+    // Not supported here. Playback still works as before
+  }
+}
+
+function pauseKeepAlive() {
+  // Suspended while paused, so it uses no battery when you aren't listening
+  if (keepAliveCtx && keepAliveCtx.state === 'running') keepAliveCtx.suspend().catch(() => {});
+}
+
+// The first touch unlocks both players, before any button handler runs
+['pointerdown', 'touchstart'].forEach((ev) => {
+  document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
+});
+
+// ============================================================
 // Tabs and navigation
 // ============================================================
 function setTab(tab) {
   activeTab = tab;
   view = tab;
   viewPlaylistId = null;
+  viewAlbum = null;
   if (tab !== 'search') {
     searchQuery = '';
     searchEl.value = '';
@@ -651,17 +882,27 @@ document.querySelectorAll('.tab').forEach((btn) => {
 function openPlaylist(id) {
   view = 'playlist';
   viewPlaylistId = id;
+  viewAlbum = null;
+  renderMain();
+  window.scrollTo(0, 0);
+}
+
+function openAlbum(name) {
+  view = 'album';
+  viewAlbum = name;
+  viewPlaylistId = null;
   renderMain();
   window.scrollTo(0, 0);
 }
 
 onTap('back-btn', () => {
-  view = 'playlists';
+  view = view === 'album' ? 'movies' : 'playlists';
+  activeTab = view;
   viewPlaylistId = null;
+  viewAlbum = null;
   renderMain();
 });
 
-// Waits until typing pauses for 120 ms before filtering, so large libraries stay smooth
 let searchTimer = null;
 searchEl.addEventListener('input', () => {
   clearTimeout(searchTimer);
@@ -672,10 +913,9 @@ searchEl.addEventListener('input', () => {
 });
 
 // ============================================================
-// Refresh: tapping the Library title loads the newest version from GitHub
+// Refresh and update notice
 // ============================================================
 async function refreshApp() {
-  haptic();
   saveState(true);
   $('refresh-icon').classList.add('spin');
   showToast('Checking for updates…');
@@ -692,16 +932,23 @@ async function refreshApp() {
 }
 
 $('title-btn').addEventListener('click', () => {
-  if (view === 'library') refreshApp();
+  if (view === 'library') {
+    haptic();
+    refreshApp();
+  }
+});
+
+$('update-banner').addEventListener('click', () => {
+  haptic();
+  refreshApp();
 });
 
 // ============================================================
 // Sorting
 // ============================================================
-// Compares text the way a person expects: case-insensitive, and numbers sorted by value
 const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-// Empty text (no artist or movie tag) is compared last, so real names come first
+// Empty text (no artist or movie tag) sorts last, so real names come first
 function compareText(x, y) {
   if (!x && y) return 1;
   if (x && !y) return -1;
@@ -712,16 +959,39 @@ const SORT_MODES = {
   name:   { label: 'Name',           cmp: (a, b) => compareText(a.title, b.title) },
   artist: { label: 'Artist',         cmp: (a, b) => compareText(a.artist, b.artist) || compareText(a.title, b.title) },
   movie:  { label: 'Movie',          cmp: (a, b) => compareText(a.album, b.album) || compareText(a.title, b.title) },
-  added:  { label: 'Recently added', cmp: (a, b) => b.addedAt - a.addedAt }, // newest first
+  added:  { label: 'Recently added', cmp: (a, b) => b.addedAt - a.addedAt },
 };
 
 function sortedTracks(list) {
   return list.slice().sort(SORT_MODES[sortMode].cmp);
 }
 
+function setSortMode(key) {
+  if (!SORT_MODES[key]) return;
+  sortMode = key;
+  writeStored(SORT_KEY, key);
+  renderMain();
+}
+
+function openSortSheet() {
+  openSheet({
+    title: 'Sort Songs',
+    actions: Object.entries(SORT_MODES).map(([key, mode]) => ({
+      label: (key === sortMode ? '✓  ' : '      ') + mode.label,
+      onClick: () => setSortMode(key),
+    })),
+  });
+}
+
+onTap('sort-btn', openSortSheet);
+
 // ============================================================
-// Main screen rendering
+// Which songs each screen shows
 // ============================================================
+function playlistById(id) {
+  return playlists.find((p) => p.id === id) || null;
+}
+
 function currentListIds() {
   if (view === 'library') return sortedTracks(tracks).map((t) => t.id);
 
@@ -732,16 +1002,56 @@ function currentListIds() {
     return sorted.filter((t) => t.search.includes(q)).map((t) => t.id);
   }
 
+  if (view === 'album') {
+    return sortedTracks(tracks.filter((t) => albumOf(t) === viewAlbum)).map((t) => t.id);
+  }
+
   if (view === 'playlist') {
-    const p = playlists.find((x) => x.id === viewPlaylistId);
+    if (viewPlaylistId === FAV_ID) {
+      return sortedTracks(tracks.filter((t) => favorites.has(t.id))).map((t) => t.id);
+    }
+    if (viewPlaylistId === RECENT_ID) {
+      return recent.filter((id) => trackMap.has(id)); // Kept in play order, newest first
+    }
+    const p = playlistById(viewPlaylistId);
     return p ? p.trackIds.filter((id) => trackMap.has(id)) : [];
   }
+
   return [];
 }
 
+// Groups songs by movie for the Movies tab
+function albumGroups() {
+  const map = new Map();
+  for (const t of tracks) {
+    const key = albumOf(t);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(t);
+  }
+  return [...map.entries()].sort((a, b) => compareText(a[0], b[0]));
+}
+
+function currentListTitle() {
+  if (view === 'album') return viewAlbum;
+  if (view === 'playlist') {
+    if (viewPlaylistId === FAV_ID) return 'Favorites';
+    if (viewPlaylistId === RECENT_ID) return 'Recently Played';
+    const p = playlistById(viewPlaylistId);
+    return p ? p.name : 'Playlist';
+  }
+  return { library: 'Library', search: 'Search', playlists: 'Playlists', movies: 'Movies' }[view];
+}
+
+// ============================================================
+// Main screen rendering
+// ============================================================
 function updateCount() {
   if (view === 'playlists') {
-    countEl.textContent = plural(playlists.length, 'playlist');
+    countEl.textContent = plural(playlists.length + 2, 'list'); // +2 for Favorites and Recently Played
+    return;
+  }
+  if (view === 'movies') {
+    countEl.textContent = plural(albumGroups().length, 'movie');
     return;
   }
   const n = view === 'library' ? tracks.length : currentListIds().length;
@@ -751,36 +1061,48 @@ function updateCount() {
 }
 
 function renderMain() {
-  let playlist = null;
-  if (view === 'playlist') {
-    playlist = playlists.find((p) => p.id === viewPlaylistId) || null;
-    if (!playlist) view = 'playlists'; // It was deleted while open
+  // A playlist can be deleted while it's open
+  if (view === 'playlist' && viewPlaylistId !== FAV_ID && viewPlaylistId !== RECENT_ID && !playlistById(viewPlaylistId)) {
+    view = 'playlists';
+    activeTab = 'playlists';
   }
 
   const isPlaylists = view === 'playlists';
-  const isPlaylist = view === 'playlist';
+  const isMovies = view === 'movies';
   const isLibrary = view === 'library';
+  const isSearch = view === 'search';
+  const isDetail = view === 'playlist' || view === 'album';
+  const isUserPlaylist = view === 'playlist' && !!playlistById(viewPlaylistId);
+  const showsGroups = isPlaylists || isMovies;
 
-  const titles = { library: 'Library', search: 'Search', playlists: 'Playlists' };
-  pageTitle.textContent = isPlaylist ? playlist.name : titles[view];
+  pageTitle.textContent = currentListTitle();
 
   // The refresh icon only appears on the Library tab
   $('refresh-icon').hidden = !isLibrary;
   $('title-btn').disabled = !isLibrary;
 
-  $('back-btn').hidden = !isPlaylist;
-  $('sort-btn').hidden = isPlaylists || isPlaylist;
-  $('sort-btn').textContent = 'Sort: ' + SORT_MODES[sortMode].label;
+  $('back-btn').hidden = !isDetail;
+  $('sort-btn').hidden = !(isLibrary || isSearch || view === 'album');
   $('add-btn').hidden = !isLibrary;
+  $('menu-btn').hidden = !isLibrary;
   $('new-playlist-btn').hidden = !isPlaylists;
-  $('playlist-tools').hidden = !isPlaylist;
-  searchEl.hidden = view !== 'search';
-  playlistList.hidden = !isPlaylists;
-  trackList.hidden = isPlaylists;
+
+  searchEl.hidden = !isSearch;
+  groupList.hidden = !showsGroups;
+  trackList.hidden = showsGroups;
   emptyBox.hidden = !(isLibrary && tracks.length === 0);
 
-  if (isPlaylists) renderPlaylists();
-  else renderTracks(currentListIds(), isPlaylist);
+  // Shuffle and Play All appear on any list of songs that has more than one
+  const ids = showsGroups ? [] : currentListIds();
+  $('list-tools').hidden = showsGroups || ids.length < 2;
+  $('list-more').hidden = !isUserPlaylist;
+
+  if (showsGroups) {
+    if (isPlaylists) renderPlaylists();
+    else renderAlbums();
+  } else {
+    renderTracks(ids, view);
+  }
 
   updateCount();
 
@@ -791,49 +1113,99 @@ function renderMain() {
   if (queueOpen) renderQueue();
 }
 
+// Builds one row in the Playlists or Movies list
+function buildGroupRow({ name, count, iconHtml, hue, artTrack, onOpen }) {
+  const row = document.createElement('li');
+  row.className = 'track-row';
+
+  const art = document.createElement('div');
+  art.className = 'art row';
+  if (artTrack) {
+    fillArt(art, artTrack);
+  } else {
+    art.style.background = gradientCss(hue);
+    art.innerHTML = iconHtml;
+  }
+
+  const text = document.createElement('div');
+  text.className = 'track-text';
+
+  const title = document.createElement('div');
+  title.className = 'track-title';
+  title.textContent = name;
+
+  const sub = document.createElement('div');
+  sub.className = 'track-sub';
+  sub.textContent = plural(count, 'song');
+
+  text.append(title, sub);
+  row.append(art, text);
+  row.addEventListener('click', () => {
+    haptic();
+    onOpen();
+  });
+  return row;
+}
+
 function renderPlaylists() {
   const frag = document.createDocumentFragment();
 
-  if (playlists.length === 0) {
+  // Two built-in lists always sit at the top
+  frag.append(buildGroupRow({
+    name: 'Favorites',
+    count: [...favorites].filter((id) => trackMap.has(id)).length,
+    iconHtml: ICON.heartFull,
+    hue: 350,
+    onOpen: () => openPlaylist(FAV_ID),
+  }));
+
+  frag.append(buildGroupRow({
+    name: 'Recently Played',
+    count: recent.filter((id) => trackMap.has(id)).length,
+    iconHtml: ICON.clock,
+    hue: 210,
+    onOpen: () => openPlaylist(RECENT_ID),
+  }));
+
+  for (const p of playlists) {
+    frag.append(buildGroupRow({
+      name: p.name,
+      count: p.trackIds.filter((id) => trackMap.has(id)).length,
+      iconHtml: ICON.playlist,
+      hue: hashHue(p.name),
+      onOpen: () => openPlaylist(p.id),
+    }));
+  }
+
+  groupList.replaceChildren(frag);
+}
+
+function renderAlbums() {
+  const groups = albumGroups();
+  const frag = document.createDocumentFragment();
+
+  if (!groups.length) {
     const none = document.createElement('li');
     none.className = 'no-match';
-    none.textContent = 'No playlists yet. Tap New Playlist to create one.';
+    none.textContent = 'No songs yet. Add songs on the Songs tab.';
     frag.append(none);
   }
 
-  for (const p of playlists) {
-    const row = document.createElement('li');
-    row.className = 'track-row';
-
-    const art = document.createElement('div');
-    art.className = 'art row';
-    art.style.background = gradientCss(hashHue(p.name));
-    art.innerHTML = ICON.playlist;
-
-    const text = document.createElement('div');
-    text.className = 'track-text';
-
-    const title = document.createElement('div');
-    title.className = 'track-title';
-    title.textContent = p.name;
-
-    const sub = document.createElement('div');
-    sub.className = 'track-sub';
-    sub.textContent = plural(p.trackIds.filter((id) => trackMap.has(id)).length, 'song');
-
-    text.append(title, sub);
-    row.append(art, text);
-    row.addEventListener('click', () => {
-      haptic();
-      openPlaylist(p.id);
-    });
-    frag.append(row);
+  for (const [name, list] of groups) {
+    frag.append(buildGroupRow({
+      name,
+      count: list.length,
+      iconHtml: ICON.movie,
+      hue: hashHue(name),
+      artTrack: list.find((t) => t.hasArt) || null, // Uses the first cover in the movie
+      onOpen: () => openAlbum(name),
+    }));
   }
 
-  playlistList.replaceChildren(frag);
+  groupList.replaceChildren(frag);
 }
 
-function buildTrackRow(track, ids, inPlaylist) {
+function buildTrackRow(track, ids, context) {
   const row = document.createElement('li');
   row.className = 'track-row';
   row.dataset.id = track.id;
@@ -865,6 +1237,13 @@ function buildTrackRow(track, ids, inPlaylist) {
   sub.append(badge, label);
   text.append(title, sub);
 
+  if (isFavorite(track.id)) {
+    const heart = document.createElement('span');
+    heart.className = 'row-heart';
+    heart.innerHTML = ICON.heartFull;
+    sub.append(heart);
+  }
+
   const more = document.createElement('button');
   more.className = 'more-btn';
   more.setAttribute('aria-label', 'Song options');
@@ -872,7 +1251,7 @@ function buildTrackRow(track, ids, inPlaylist) {
   more.addEventListener('click', (e) => {
     e.stopPropagation(); // Don't also start playback
     haptic();
-    openSongOptions(track.id, inPlaylist);
+    openSongOptions(track.id, context);
   });
 
   row.append(art, text, more);
@@ -880,13 +1259,69 @@ function buildTrackRow(track, ids, inPlaylist) {
     haptic();
     startQueue(ids, track.id);
   });
+
+  addSwipeToDelete(row, track.id);
   return row;
 }
 
 // ============================================================
-// Virtual song list
-// Only the rows near the screen are built. Scrolling adds and removes rows as needed,
-// so a library of thousands of songs stays quick. Each row is placed at its exact position.
+// Swipe left on a row to remove the song
+// Only horizontal drags count, so scrolling the list still works normally
+// ============================================================
+function addSwipeToDelete(row, id) {
+  let startX = 0;
+  let startY = 0;
+  let dragging = false;
+  let decided = false;
+
+  row.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dragging = false;
+    decided = false;
+    row.classList.add('no-anim');
+  }, { passive: true });
+
+  row.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+
+    // Decide once whether this gesture is a sideways swipe or a normal scroll
+    if (!decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      decided = true;
+      dragging = Math.abs(dx) > Math.abs(dy);
+    }
+    if (!dragging) return;
+
+    const shift = Math.min(0, dx); // Left only
+    row.style.transform = `translateX(${Math.max(shift, -140)}px)`;
+    row.classList.toggle('will-delete', shift < -80);
+  }, { passive: true });
+
+  const finish = (e) => {
+    row.classList.remove('no-anim');
+    if (!dragging) return;
+
+    const dx = (e.changedTouches ? e.changedTouches[0].clientX : startX) - startX;
+    row.style.transform = '';
+    row.classList.remove('will-delete');
+    dragging = false;
+
+    if (dx < -80) {
+      haptic();
+      confirmRemove(id);
+    }
+  };
+
+  row.addEventListener('touchend', finish);
+  row.addEventListener('touchcancel', finish);
+}
+
+// ============================================================
+// Virtual song list: only rows near the screen exist in the page
 // ============================================================
 function columnsFor(width) {
   if (!window.matchMedia('(min-width: 720px)').matches) return 1;
@@ -906,19 +1341,26 @@ function placeRow(el, row, col) {
   el.style.left = `calc(${col} * ((100% - ${colGap}px) / ${virt.cols} + ${GRID_GAP}px))`;
 }
 
-function renderTracks(ids, inPlaylist) {
+function emptyListMessage(context) {
+  if (context === 'playlist') {
+    if (viewPlaylistId === FAV_ID) return 'No favorites yet. Open a song and tap the heart.';
+    if (viewPlaylistId === RECENT_ID) return 'Nothing played yet.';
+    return 'This playlist is empty. Tap ⋯ on a song and choose Add to Playlist.';
+  }
+  if (context === 'search' && tracks.length) return 'No matching songs';
+  return '';
+}
+
+function renderTracks(ids, context) {
   clearVirtualRows();
   virt.ids = ids;
-  virt.inPlaylist = inPlaylist;
+  virt.context = context;
 
   if (ids.length === 0) {
     trackList.classList.remove('virtual');
     trackList.style.height = '';
 
-    let msg = '';
-    if (inPlaylist) msg = 'This playlist is empty. Tap ⋯ on a song in your library and choose Add to Playlist.';
-    else if (view === 'search' && tracks.length) msg = 'No matching songs';
-
+    const msg = emptyListMessage(context);
     if (msg) {
       const none = document.createElement('li');
       none.className = 'no-match';
@@ -940,15 +1382,13 @@ function renderTracks(ids, inPlaylist) {
 function renderVisibleRows() {
   if (!virt.ids.length || trackList.hidden) return;
 
-  // How far the list has scrolled past its top edge, in pixels
   const listTop = trackList.getBoundingClientRect().top + window.scrollY;
   const rel = Math.max(0, window.scrollY - listTop);
 
-  // Rows from a little above the screen to a little below, so fast scrolling has no gaps
+  // A few rows above and below the screen, so fast scrolling leaves no gaps
   const firstRow = Math.max(0, Math.floor(rel / ROW_PITCH) - 3);
   const lastRow = Math.min(virt.rows - 1, Math.floor((rel + window.innerHeight) / ROW_PITCH) + 3);
 
-  // Remove rows that have scrolled out of range
   for (const [idx, el] of virt.els) {
     const row = Math.floor(idx / virt.cols);
     if (row < firstRow || row > lastRow) {
@@ -958,7 +1398,6 @@ function renderVisibleRows() {
     }
   }
 
-  // Build rows that have come into range
   for (let row = firstRow; row <= lastRow; row++) {
     for (let col = 0; col < virt.cols; col++) {
       const idx = row * virt.cols + col;
@@ -967,7 +1406,7 @@ function renderVisibleRows() {
       const track = byId(virt.ids[idx]);
       if (!track) continue;
 
-      const el = buildTrackRow(track, virt.ids, virt.inPlaylist);
+      const el = buildTrackRow(track, virt.ids, virt.context);
       placeRow(el, row, col);
       virt.els.set(idx, el);
       rowById.set(track.id, el);
@@ -976,7 +1415,6 @@ function renderVisibleRows() {
   }
 }
 
-// Scroll events can fire many times a second, so the work is done once per screen refresh
 function scheduleVirtualRender() {
   if (virt.frame) return;
   virt.frame = requestAnimationFrame(() => {
@@ -988,12 +1426,10 @@ function scheduleVirtualRender() {
 window.addEventListener('scroll', scheduleVirtualRender, { passive: true });
 window.addEventListener('resize', () => {
   if (!virt.ids.length || trackList.hidden) return;
-  // Rebuild only when the column count changes, such as rotating the phone
-  if (columnsFor(trackList.clientWidth) !== virt.cols) renderTracks(virt.ids, virt.inPlaylist);
+  if (columnsFor(trackList.clientWidth) !== virt.cols) renderTracks(virt.ids, virt.context);
   else scheduleVirtualRender();
 });
 
-// Moves the "playing" highlight without rebuilding the list
 function highlightRow(prevId, nextId) {
   if (prevId) {
     const row = rowById.get(prevId);
@@ -1076,12 +1512,18 @@ function closeSheet() {
   lockScroll();
 }
 
-function openSongOptions(id, inPlaylist) {
+function openSongOptions(id, context) {
   const track = byId(id);
   if (!track) return;
 
-  const actions = [{ label: 'Add to Playlist', onClick: () => openChoosePlaylist(id) }];
-  if (inPlaylist) {
+  const fav = isFavorite(id);
+  const actions = [
+    { label: fav ? 'Remove from Favorites' : 'Add to Favorites', onClick: () => toggleFavorite(id) },
+    { label: 'Add to Playlist', onClick: () => openChoosePlaylist(id) },
+    { label: 'Play Next', onClick: () => playNext(id) },
+  ];
+
+  if (context === 'playlist' && playlistById(viewPlaylistId)) {
     actions.push({ label: 'Remove from This Playlist', onClick: () => removeFromPlaylist(viewPlaylistId, id) });
   }
   actions.push({ label: 'Remove from Library', danger: true, onClick: () => confirmRemove(id) });
@@ -1089,7 +1531,6 @@ function openSongOptions(id, inPlaylist) {
   openSheet({ title: track.title, message: subtitleFor(track), actions });
 }
 
-// Asks once before deleting, because removing also frees the stored copy
 function confirmRemove(id) {
   const track = byId(id);
   if (!track) return;
@@ -1127,7 +1568,7 @@ function openNewPlaylist(trackId) {
 }
 
 function openPlaylistOptions() {
-  const p = playlists.find((x) => x.id === viewPlaylistId);
+  const p = playlistById(viewPlaylistId);
   if (!p) return;
   openSheet({
     title: p.name,
@@ -1145,6 +1586,21 @@ function openRenamePlaylist(p) {
     actions: [{ label: 'Save', primary: true, onClick: (name) => renamePlaylist(p, name) }],
   });
 }
+
+// The ⋯ menu in the Library header
+function openMainMenu() {
+  openSheet({
+    title: 'Library',
+    message: storageText ? `${plural(tracks.length, 'song')} · ${storageText}` : plural(tracks.length, 'song'),
+    actions: [
+      { label: 'Sleep Timer', onClick: openSleepSheet },
+      { label: 'Back Up Playlists', onClick: exportBackup },
+      { label: 'Restore From Backup', onClick: () => importInput.click() },
+    ],
+  });
+}
+
+onTap('menu-btn', openMainMenu);
 
 // ============================================================
 // Playlists
@@ -1166,7 +1622,7 @@ async function createPlaylist(name) {
 }
 
 async function addToPlaylist(playlistId, trackId) {
-  const p = playlists.find((x) => x.id === playlistId);
+  const p = playlistById(playlistId);
   if (!p) return;
   if (p.trackIds.includes(trackId)) {
     showToast(`Already in "${p.name}"`);
@@ -1179,7 +1635,7 @@ async function addToPlaylist(playlistId, trackId) {
 }
 
 async function removeFromPlaylist(playlistId, trackId) {
-  const p = playlists.find((x) => x.id === playlistId);
+  const p = playlistById(playlistId);
   if (!p) return;
   p.trackIds = p.trackIds.filter((id) => id !== trackId);
   await persistPlaylist(p);
@@ -1202,12 +1658,13 @@ async function deletePlaylist(p) {
     // Already gone from this visit
   }
   view = 'playlists';
+  activeTab = 'playlists';
   viewPlaylistId = null;
   showToast(`Deleted "${p.name}"`);
   renderMain();
 }
 
-onTap('playlist-shuffle', () => {
+onTap('list-shuffle', () => {
   const ids = currentListIds();
   if (!ids.length) return;
   shuffleOn = true;
@@ -1215,43 +1672,131 @@ onTap('playlist-shuffle', () => {
   startQueue(ids, ids[randomInt(ids.length)]);
 });
 
-onTap('playlist-more', openPlaylistOptions);
+onTap('list-play', () => {
+  const ids = currentListIds();
+  if (!ids.length) return;
+  shuffleOn = false;
+  setShuffleState();
+  startQueue(ids, ids[0]);
+});
+
+onTap('list-more', openPlaylistOptions);
 onTap('new-playlist-btn', () => openNewPlaylist(null));
 
 // ============================================================
-// Sort menu
+// Backup and restore
+// Only the song list, playlists and favorites are saved, not the audio files,
+// which would make the backup hundreds of megabytes.
 // ============================================================
-function setSortMode(key) {
-  if (!SORT_MODES[key]) return;
-  sortMode = key;
+function exportBackup() {
+  const data = {
+    app: 'glass-music',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    sortMode,
+    songs: tracks.map((t) => ({
+      id: t.id, title: t.title, album: t.album, artist: t.artist, format: t.format, addedAt: t.addedAt,
+    })),
+    playlists: playlists.map((p) => ({
+      id: p.id, name: p.name, trackIds: p.trackIds.slice(), createdAt: p.createdAt,
+    })),
+    favorites: [...favorites],
+    recent: recent.slice(),
+  };
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `music-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+  showToast('Backup saved. Keep it in Files or iCloud.');
+}
+
+importInput.addEventListener('change', async () => {
+  const file = importInput.files[0];
+  importInput.value = '';
+  if (!file) return;
+
+  let data;
   try {
-    localStorage.setItem(SORT_KEY, key); // Remembered for next time
+    data = JSON.parse(await file.text());
   } catch (err) {
-    // Storage blocked: the choice lasts for this visit only
+    showToast("That file isn't a valid backup.");
+    return;
   }
+
+  if (!data || data.app !== 'glass-music' || !Array.isArray(data.songs)) {
+    showToast("That file isn't a backup from this app.");
+    return;
+  }
+
+  openSheet({
+    title: 'Restore backup?',
+    message: `This backup holds ${plural(data.playlists ? data.playlists.length : 0, 'playlist')} and ${plural(data.favorites ? data.favorites.length : 0, 'favorite')}. Your current playlists will be replaced. Songs are matched by name, so add your music first.`,
+    actions: [{ label: 'Restore', primary: true, onClick: () => applyBackup(data) }],
+  });
+});
+
+// Matches saved songs to the songs in the library: by id first, then by title and format,
+// then by title alone. Songs re-added after a reset get new ids, so name matching is needed.
+function buildIdMap(savedSongs) {
+  const map = new Map();
+  const byTitleFormat = new Map();
+  const byTitle = new Map();
+
+  for (const t of tracks) {
+    byTitleFormat.set(`${t.title.toLowerCase()}|${t.format}`, t.id);
+    if (!byTitle.has(t.title.toLowerCase())) byTitle.set(t.title.toLowerCase(), t.id);
+  }
+
+  for (const s of savedSongs) {
+    const title = cleanText(s.title || '').toLowerCase();
+    const local = trackMap.has(s.id)
+      ? s.id
+      : byTitleFormat.get(`${title}|${s.format}`) || byTitle.get(title);
+    if (local) map.set(s.id, local);
+  }
+  return map;
+}
+
+async function applyBackup(data) {
+  const idMap = buildIdMap(data.songs);
+  const toLocal = (id) => idMap.get(id) || (trackMap.has(id) ? id : null);
+
+  // Replace playlists with the saved ones
+  const oldIds = playlists.map((p) => p.id);
+  playlists = (data.playlists || []).map((p) => ({
+    id: p.id || newId(),
+    name: p.name || 'Playlist',
+    trackIds: (p.trackIds || []).map(toLocal).filter(Boolean),
+    createdAt: p.createdAt || Date.now(),
+  }));
+
+  try {
+    await Promise.all(oldIds.map((id) => dbRun('playlists', 'readwrite', (s) => s.delete(id))));
+    await Promise.all(playlists.map(persistPlaylist));
+  } catch (err) {
+    // The restored lists still work for this visit
+  }
+
+  favorites = new Set((data.favorites || []).map(toLocal).filter(Boolean));
+  writeStored(FAV_KEY, [...favorites]);
+
+  recent = (data.recent || []).map(toLocal).filter(Boolean).slice(0, RECENT_MAX);
+  writeStored(RECENT_KEY, recent);
+
+  if (data.sortMode && SORT_MODES[data.sortMode]) setSortMode(data.sortMode);
+
+  const matched = [...idMap.values()].length;
+  showToast(`Restored. ${matched} of ${data.songs.length} songs matched.`);
+  updateFavButton();
   renderMain();
 }
-
-function loadSortMode() {
-  try {
-    const saved = localStorage.getItem(SORT_KEY);
-    if (saved && SORT_MODES[saved]) sortMode = saved;
-  } catch (err) {
-    // Use the default
-  }
-}
-
-function openSortSheet() {
-  openSheet({
-    title: 'Sort Songs',
-    actions: Object.entries(SORT_MODES).map(([key, mode]) => ({
-      label: (key === sortMode ? '✓  ' : '      ') + mode.label,
-      onClick: () => setSortMode(key),
-    })),
-  });
-}
-
-onTap('sort-btn', openSortSheet);
 
 // ============================================================
 // Removing a song from the library
@@ -1276,6 +1821,11 @@ async function removeTrack(id) {
   tracks = tracks.filter((t) => t.id !== id);
   trackMap.delete(id);
 
+  if (favorites.delete(id)) writeStored(FAV_KEY, [...favorites]);
+  const hadRecent = recent.includes(id);
+  recent = recent.filter((x) => x !== id);
+  if (hadRecent) writeStored(RECENT_KEY, recent);
+
   // Release the links so the browser can free the memory
   if (track.url) URL.revokeObjectURL(track.url);
   if (track.artUrl) URL.revokeObjectURL(track.artUrl);
@@ -1285,7 +1835,7 @@ async function removeTrack(id) {
 
   try {
     await deleteSongRecords(id);
-    await Promise.all(touched.map(persistPlaylist)); // Only playlists that contained the song
+    await Promise.all(touched.map(persistPlaylist));
   } catch (err) {
     // The song is still gone from this visit
   }
@@ -1312,11 +1862,78 @@ function startQueue(ids, startId = null) {
   if (queueOpen) renderQueue();
 }
 
-// Changes the current song and starts it. The audio starts first, with no waiting,
-// because iOS is stricter about starting audio when the app is in the background.
+// Puts a song immediately after the current one
+function playNext(id) {
+  if (!order.length || !currentId) {
+    startQueue([id]);
+    return;
+  }
+  order = order.filter((x) => x !== id);
+  const pos = order.indexOf(currentId);
+  order.splice(pos + 1, 0, id);
+  if (!base.includes(id)) base.push(id);
+  primeNext();
+  if (queueOpen) renderQueue();
+  showToast('Playing next');
+}
+
+// Loads the song that comes after this one into the idle player, so the swap is instant
+async function primeNext() {
+  const pos = order.indexOf(currentId);
+  if (pos === -1) return;
+
+  let nextId = null;
+  if (pos + 1 < order.length) nextId = order[pos + 1];
+  else if (repeatMode === 1 && order.length > 1) nextId = order[0];
+  if (!nextId || nextId === currentId) return;
+
+  const track = byId(nextId);
+  if (!track || idle.dataset.trackId === nextId) return;
+
+  try {
+    const url = await fileUrlFor(track);
+    if (byId(currentId) === null) return;
+    idle.src = url;
+    idle.dataset.trackId = nextId;
+    idle.load();
+  } catch (err) {
+    // The file is missing. It will be reported when it's actually played
+  }
+}
+
+// Swaps the two players. The incoming one already has its song loaded, which is what
+// gives this a chance of working while the phone is locked.
+function swapToIdle(id) {
+  const prevId = currentId;
+  const outgoing = audio;
+
+  outgoing.pause();
+  try {
+    outgoing.currentTime = 0;
+  } catch (err) {
+    // Not always allowed. Harmless
+  }
+
+  [audio, idle] = [idle, audio];
+  delete idle.dataset.trackId;
+
+  currentId = id;
+  pendingSeek = null;
+  wantPlaying = true;
+  playAudio();
+
+  afterTrackChange(prevId, id);
+}
+
 function switchTo(id) {
   const track = byId(id);
   if (!track) return;
+
+  // Use the already-loaded player when it happens to hold this song
+  if (idle.dataset.trackId === id && idle.getAttribute('src')) {
+    swapToIdle(id);
+    return;
+  }
 
   const prevId = currentId;
   currentId = id;
@@ -1324,21 +1941,27 @@ function switchTo(id) {
   wantPlaying = true;
 
   loadAndPlay(track);
+  afterTrackChange(prevId, id);
+}
+
+// Everything that happens whichever way the song changed
+function afterTrackChange(prevId, id) {
+  const track = byId(id);
+  if (!track) return;
+
   setMediaSession(track);
+  noteRecentlyPlayed(id);
   saveState(true);
 
-  // Screen updates are skipped while the app is in the background, and done on return
   if (document.hidden) {
-    uiDirty = true;
+    uiDirty = true;      // The screen is caught up when the app comes back
   } else {
     highlightRow(prevId, id);
     updateNowPlayingUI();
   }
-  prefetchNext();
+  primeNext();
 }
 
-// Points the audio at the song and starts it. Instant when the link is already made;
-// otherwise the file is read from storage first.
 function loadAndPlay(track) {
   const wanted = track.id;
 
@@ -1350,7 +1973,7 @@ function loadAndPlay(track) {
 
   fileUrlFor(track)
     .then((url) => {
-      if (currentId !== wanted) return; // The user has already moved on to another song
+      if (currentId !== wanted) return; // The user already moved on
       audio.src = url;
       playAudio();
     })
@@ -1359,25 +1982,17 @@ function loadAndPlay(track) {
     });
 }
 
-// Loads the next song's file in advance, so skipping forward starts right away
-function prefetchNext() {
-  const pos = order.indexOf(currentId);
-  if (pos === -1 || pos + 1 >= order.length) return;
-  const upcoming = byId(order[pos + 1]);
-  if (upcoming && !upcoming.url) fileUrlFor(upcoming).catch(() => {});
-}
-
 function playAudio() {
+  startKeepAlive();
   const p = audio.play();
   if (p && p.catch) {
     p.catch(() => {
-      // iOS refused to start (common in the background). It is retried when the app comes back.
+      // iOS refused to start, which happens in the background. Retried when the app returns
       setPlayIcons(false);
     });
   }
 }
 
-// The song before or after the current one in play order, or null when playback should stop
 function neighborId(step) {
   if (!order.length) return null;
 
@@ -1428,7 +2043,6 @@ function togglePlay() {
     return;
   }
 
-  // Nothing loaded yet (for example right after a refresh): load the song, then play
   if (!audio.getAttribute('src')) {
     wantPlaying = true;
     loadAndPlay(byId(currentId));
@@ -1449,6 +2063,7 @@ function toggleShuffle() {
   if (base.length) order = shuffleOn ? shuffledWithFirst(base, currentId) : base.slice();
   setShuffleState();
   saveState(true);
+  primeNext();
   if (queueOpen) renderQueue();
 }
 
@@ -1456,6 +2071,7 @@ function cycleRepeat() {
   repeatMode = (repeatMode + 1) % 3;
   setRepeatState();
   saveState(true);
+  primeNext();
   if (queueOpen) renderQueue();
 }
 
@@ -1537,6 +2153,7 @@ function updateNowPlayingUI() {
   fillArt($('fp-art'), track);
 
   applyPalette(track);
+  updateFavButton();
   setPlayIcons(!audio.paused);
   updateTimes();
 }
@@ -1557,7 +2174,6 @@ function setRepeatState() {
   btn.innerHTML = repeatMode === 2 ? ICON.repeatOne : ICON.repeat;
 }
 
-// Updates the slider and both time labels from the audio's position
 function updateTimes() {
   const d = audio.duration;
   const t = pendingSeek !== null ? pendingSeek : audio.currentTime;
@@ -1583,6 +2199,7 @@ function openFull() {
   fullPlayer.setAttribute('aria-hidden', 'false');
   const track = byId(currentId);
   setTopColor(track && track.palette ? track.palette[0] : getComputedStyle(fullPlayer).getPropertyValue('--p1').trim());
+  updateSleepUI();
   lockScroll();
 }
 
@@ -1599,6 +2216,10 @@ $('mini-open').addEventListener('click', () => {
 });
 onTap('close-full', closeFull);
 onTap('queue-btn', toggleQueue);
+onTap('sleep-btn', openSleepSheet);
+onTap('fav-btn', () => {
+  if (currentId) toggleFavorite(currentId);
+});
 
 // Swipe down to close, unless the Up Next list is being scrolled
 let touchStartY = null;
@@ -1625,53 +2246,17 @@ onTap('shuffle', toggleShuffle);
 onTap('repeat', cycleRepeat);
 
 // ============================================================
-// Audio element events
+// Audio events
+// Both players share these handlers, and each one ignores events
+// from whichever player is not currently the active one.
 // ============================================================
-audio.addEventListener('play', () => {
-  setPlayIcons(true);
-  setPlaybackState('playing');
-});
+function activeOnly(fn) {
+  return function handler(e) {
+    if (e.target !== audio) return;
+    fn(e);
+  };
+}
 
-audio.addEventListener('playing', () => {
-  errorStreak = 0; // A song started fine, so the failure counter resets
-});
-
-audio.addEventListener('pause', () => {
-  setPlayIcons(false);
-  setPlaybackState('paused');
-  saveState(true);
-});
-
-// Once a restored song knows its length, jump to where it stopped last time
-audio.addEventListener('loadedmetadata', () => {
-  if (pendingSeek !== null && isFinite(audio.duration)) {
-    audio.currentTime = Math.min(pendingSeek, Math.max(0, audio.duration - 1));
-    pendingSeek = null;
-  }
-  updatePositionState();
-  if (!document.hidden) updateTimes();
-});
-
-audio.addEventListener('timeupdate', () => {
-  // Saves the position every 5 seconds, so a closed app can resume close to where it stopped
-  const now = Date.now();
-  if (now - lastSave > 5000) {
-    saveState();
-    updatePositionState();
-  }
-  if (!document.hidden) updateTimes(); // No screen work while in the background
-});
-
-audio.addEventListener('ended', () => {
-  if (repeatMode === 2) {
-    audio.currentTime = 0;
-    playAudio();
-  } else {
-    next();
-  }
-});
-
-// A song that can't be decoded is skipped automatically instead of stopping the playlist
 function handleBrokenTrack(track) {
   track.failed = true;
   markFailedRow(track.id);
@@ -1687,11 +2272,62 @@ function handleBrokenTrack(track) {
   }
 }
 
-audio.addEventListener('error', () => {
-  const track = byId(currentId);
-  if (!track || !audio.getAttribute('src')) return;
-  handleBrokenTrack(track);
-});
+for (const el of [audioA, audioB]) {
+  el.addEventListener('play', activeOnly(() => {
+    setPlayIcons(true);
+    setPlaybackState('playing');
+    startKeepAlive();
+  }));
+
+  el.addEventListener('playing', activeOnly(() => {
+    errorStreak = 0; // A song started fine, so the failure count resets
+  }));
+
+  el.addEventListener('pause', activeOnly(() => {
+    setPlayIcons(false);
+    setPlaybackState('paused');
+    pauseKeepAlive();
+    saveState(true);
+  }));
+
+  // Once a restored song knows its length, jump to where it stopped last time
+  el.addEventListener('loadedmetadata', activeOnly(() => {
+    if (pendingSeek !== null && isFinite(audio.duration)) {
+      audio.currentTime = Math.min(pendingSeek, Math.max(0, audio.duration - 1));
+      pendingSeek = null;
+    }
+    updatePositionState();
+    if (!document.hidden) updateTimes();
+  }));
+
+  el.addEventListener('timeupdate', activeOnly(() => {
+    const now = Date.now();
+    if (now - lastSave > 5000) {
+      saveState();
+      updatePositionState();
+    }
+    if (!document.hidden) updateTimes(); // No screen work while in the background
+  }));
+
+  el.addEventListener('ended', activeOnly(() => {
+    if (sleepAtTrackEnd) {
+      sleepNow();
+      return;
+    }
+    if (repeatMode === 2) {
+      audio.currentTime = 0;
+      playAudio();
+    } else {
+      next();
+    }
+  }));
+
+  el.addEventListener('error', activeOnly(() => {
+    const track = byId(currentId);
+    if (!track || !audio.getAttribute('src')) return;
+    handleBrokenTrack(track);
+  }));
+}
 
 // ============================================================
 // Progress slider
@@ -1766,7 +2402,6 @@ function setPlaybackState(state) {
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
 }
 
-// Keeps the lock screen progress bar accurate
 function updatePositionState() {
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
   const d = audio.duration;
@@ -1790,7 +2425,6 @@ function setupMediaSessionHandlers() {
     pause: () => { wantPlaying = false; audio.pause(); },
     previoustrack: prev,
     nexttrack: next,
-    // Lets you drag the progress bar on the lock screen
     seekto: (details) => {
       if (details && isFinite(details.seekTime)) {
         audio.currentTime = details.seekTime;
@@ -1799,7 +2433,6 @@ function setupMediaSessionHandlers() {
     },
   };
 
-  // Handlers are registered once at start-up, not on every song change
   for (const [action, handler] of Object.entries(handlers)) {
     try {
       navigator.mediaSession.setActionHandler(action, handler);
@@ -1810,7 +2443,7 @@ function setupMediaSessionHandlers() {
 }
 
 // ============================================================
-// Saving and restoring where you left off (localStorage)
+// Saving and restoring where you left off
 // ============================================================
 function saveState(force = false) {
   const now = Date.now();
@@ -1857,12 +2490,13 @@ function restoreState() {
   currentId = track.id;
   pendingSeek = Number(s.time) || 0;
 
-  // The file is loaded now, but not played. The saved position is applied once it's ready
+  // Loaded but not played, so the saved position is ready when you press play
   fileUrlFor(track)
     .then((url) => {
       if (currentId !== track.id) return;
       audio.src = url;
       audio.load();
+      primeNext();
     })
     .catch(() => {});
 
@@ -1880,7 +2514,6 @@ document.addEventListener('visibilitychange', () => {
     return;
   }
 
-  // Catches up on screen changes that were skipped in the background
   if (uiDirty) {
     uiDirty = false;
     renderMain();
@@ -1888,23 +2521,56 @@ document.addEventListener('visibilitychange', () => {
   } else {
     updateTimes();
   }
+  updateSleepUI();
 
   // If iOS stopped the next song from starting in the background, start it now
-  if (wantPlaying && audio.paused && currentId) playAudio();
+  if (wantPlaying && audio.paused && currentId) {
+    startKeepAlive();
+    playAudio();
+  }
 });
 
-// pagehide fires when the app is closed or reloaded
 window.addEventListener('pagehide', () => saveState(true));
+
+// ============================================================
+// Service worker, including the "update ready" notice
+// ============================================================
+function watchForUpdates(reg) {
+  if (!reg) return;
+  reg.addEventListener('updatefound', () => {
+    const fresh = reg.installing;
+    if (!fresh) return;
+    fresh.addEventListener('statechange', () => {
+      // A new version is ready, and an old one is currently running
+      if (fresh.state === 'installed' && navigator.serviceWorker.controller) {
+        $('update-banner').hidden = false;
+      }
+    });
+  });
+}
 
 // ============================================================
 // Start up
 // ============================================================
 async function init() {
-  loadSortMode();
+  sortMode = (() => {
+    try {
+      const saved = localStorage.getItem(SORT_KEY);
+      return saved && SORT_MODES[saved] ? saved : 'name';
+    } catch (err) {
+      return 'name';
+    }
+  })();
+
+  favorites = new Set(readStoredList(FAV_KEY));
+  recent = readStoredList(RECENT_KEY);
+
   setIcons();
   setPlayIcons(false);
   setShuffleState();
   setRepeatState();
+  updateFavButton();
+  updateSleepUI();
   setupMediaSessionHandlers();
   setTopColor(HOME_COLOR);
 
@@ -1926,8 +2592,7 @@ async function init() {
     renderMain();
     restoreState();
 
-    // Moves older saves into the new layout after the library is already on screen
-    migrateLegacy(saved);
+    migrateLegacy(saved); // Older saves are converted after the library is on screen
   } catch (err) {
     renderMain();
     showToast("Couldn't open saved storage. Songs will only last this visit.");
@@ -1935,14 +2600,14 @@ async function init() {
 
   updateStorageInfo();
 
-  // Asks the browser not to clear the library when the phone is low on space
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persist().catch(() => {});
   }
 
-  // Registers the service worker that keeps the app up to date and working offline
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(watchForUpdates)
+      .catch(() => {});
   }
 }
 

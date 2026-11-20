@@ -241,7 +241,7 @@ h1 {
   height: 20px;
 }
 
-.playlist-tools {
+.list-tools {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -939,4 +939,117 @@ h1 {
 .track-list.virtual .track-row {
   position: absolute;
   height: 74px;
+}
+
+
+/* ============================================================
+   NEW IN THIS VERSION
+   Icon buttons, favorites, sleep timer, swipe to delete, update banner
+   ============================================================ */
+
+/* Several round icon buttons sit together in the header */
+.top-actions {
+  gap: 8px;
+}
+
+.round-btn.on {
+  background: #ffffff;
+  color: var(--red);
+  border-color: transparent;
+}
+
+/* Shuffle Play / Play All row */
+.list-tools .btn {
+  flex: 0 1 auto;
+}
+
+/* Small heart shown on a favorited song's row */
+.row-heart {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #ff8fa3;
+}
+
+.row-heart svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+/* Buttons grouped on the right of the full player's top bar */
+.fp-top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fp-top-right .round-btn.on {
+  background: #ffffff;
+  color: #c0003a;
+}
+
+/* Sleep timer line under the playback controls */
+.sleep-status {
+  margin: 14px 0 0;
+  font-size: 13px;
+  text-align: center;
+  color: var(--dim);
+}
+
+/* ---------- Swipe to delete ---------- */
+.track-list .track-row {
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s ease;
+  touch-action: pan-y; /* the browser keeps vertical scrolling, we handle sideways */
+}
+
+/* While a finger is dragging, the row must follow it with no animation lag */
+.track-list .track-row.no-anim {
+  transition: background 0.2s ease;
+}
+
+/* A red delete panel sits behind the row and is revealed as it slides left */
+.track-list.virtual .track-row::after {
+  content: "Remove";
+  position: absolute;
+  top: 0;
+  right: -140px;
+  width: 140px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(255, 60, 90, 0.9);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.track-list.virtual .track-row.will-delete::after {
+  opacity: 1;
+}
+
+/* ---------- Update ready banner ---------- */
+.update-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 150px);
+  z-index: 60;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 999px;
+  background-color: #ffffff;
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* ---------- Four tabs need slightly tighter text ---------- */
+.tab {
+  font-size: 10.5px;
 }
